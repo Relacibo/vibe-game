@@ -109,9 +109,8 @@ fn main() {
         Update,
         (
             camera_follow_system,
-            bullet_player_collision_system,
-            bullet_enemy_collision_system, // <--- NEU
             (
+                bullet_collision_system,
                 player_movement_system,
                 enemy_movement_system,
                 enemy_shooting,
@@ -398,39 +397,6 @@ fn camera_follow_system(
     camera_transform.look_at(player_translation + player_forward * 10.0, Vec3::Y);
 }
 
-fn bullet_player_collision_system(
-    mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    mut player_query: Query<(Entity, &mut Health), With<Player>>,
-    bullet_query: Query<Entity, With<Bullet>>,
-) {
-    for event in collision_events.read() {
-        if let CollisionEvent::Started(e1, e2, _) = event {
-            let (player_entity, mut health) = if let Ok(p) = player_query.get_mut(*e1) {
-                (e1, p.1)
-            } else if let Ok(p) = player_query.get_mut(*e2) {
-                (e2, p.1)
-            } else {
-                continue;
-            };
-
-            let bullet_entity = if bullet_query.get(*e1).is_ok() {
-                *e1
-            } else if bullet_query.get(*e2).is_ok() {
-                *e2
-            } else {
-                continue;
-            };
-
-            // Spieler bekommt Schaden
-            health.value -= 1.0;
-            // Bullet entfernen
-            // commands.entity(bullet_entity).despawn();
-            println!("Spieler getroffen! Leben: {}", health.value);
-        }
-    }
-}
-
 fn bullet_lifetime_system(
     mut commands: Commands,
     time: Res<Time>,
@@ -550,49 +516,6 @@ fn spawn_wall(
         RigidBody::Fixed,
         Collider::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
     ));
-}
-
-fn bullet_enemy_collision_system(
-    mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    mut enemy_query: Query<(Entity, &mut ExternalImpulse), With<Enemy>>,
-    bullet_query: Query<(Entity, &Velocity), With<Bullet>>,
-) {
-    for event in collision_events.read() {
-        if let CollisionEvent::Started(e1, e2, _) = event {
-            let (bullet_entity, bullet_velocity) = if let Ok(b) = bullet_query.get(*e1) {
-                b
-            } else if let Ok(b) = bullet_query.get(*e2) {
-                b
-            } else {
-                continue;
-            };
-
-            let (enemy_entity, mut impulse) = if let Ok(e) = enemy_query.get_mut(*e1) {
-                e
-            } else if let Ok(e) = enemy_query.get_mut(*e2) {
-                e
-            } else {
-                continue;
-            };
-
-            let dir = bullet_velocity.linvel.normalize_or_zero();
-            let impulse_vec = dir * 60.0 + Vec3::Y * 6.0;
-            impulse.impulse += impulse_vec;
-
-            // Explosion vormerken
-            commands.entity(enemy_entity).insert(PendingExplosion {
-                timer: Timer::from_seconds(2.0, TimerMode::Once),
-                start_color: Color::from(Srgba::new(1.0, 0.2, 0.2, 1.0)), // Ursprungsfarbe
-                end_color: Color::from(Srgba::new(1.0, 1.0, 0.2, 1.0)),   // z.B. gelblich
-                start_scale: Vec3::ONE,
-                end_scale: Vec3::splat(2.0),
-            });
-
-            // Kugel entfernen
-            commands.entity(bullet_entity).despawn();
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -933,5 +856,52 @@ fn pending_explosion_animation_system(
 
         // Nach Ablauf: NICHT despawnen, sondern ggf. Explosion auslösen!
         // (Das machst du weiterhin im enemy_explosion_system)
+    }
+}
+
+fn bullet_collision_system(
+    mut commands: Commands,
+    mut collision_events: EventReader<CollisionEvent>,
+    mut player_query: Query<(Entity, &mut Health), With<Player>>,
+    mut enemy_query: Query<(Entity, &mut ExternalImpulse), With<Enemy>>,
+    bullet_query: Query<(Entity, &Velocity), With<Bullet>>,
+) {
+    for event in collision_events.read() {
+        if let CollisionEvent::Started(e1, e2, _) = event {
+            // Finde die Bullet und ihre Velocity
+            let ((bullet_entity, bullet_velocity), other) = if let Ok(b) = bullet_query.get(*e1) {
+                (b, e2)
+            } else if let Ok(b) = bullet_query.get(*e2) {
+                (b, e1)
+            } else {
+                continue;
+            };
+
+            // Prüfe, ob der andere ein Spieler ist
+            if let Ok((player_entity, mut health)) = player_query.get_mut(*other) {
+                health.value -= 1.0;
+                println!("Spieler getroffen! Leben: {}", health.value);
+                continue;
+            }
+
+            // Prüfe, ob der andere ein Gegner ist
+            if let Ok((enemy_entity, mut impulse)) = enemy_query.get_mut(*other) {
+                let dir = bullet_velocity.linvel.normalize_or_zero();
+                let impulse_vec = dir * 60.0 + Vec3::Y * 6.0;
+                impulse.impulse += impulse_vec;
+
+                // Explosion vormerken
+                commands.entity(enemy_entity).insert(PendingExplosion {
+                    timer: Timer::from_seconds(2.0, TimerMode::Once),
+                    start_color: Color::from(Srgba::new(1.0, 0.2, 0.2, 1.0)),
+                    end_color: Color::from(Srgba::new(1.0, 1.0, 0.2, 1.0)),
+                    start_scale: Vec3::ONE,
+                    end_scale: Vec3::splat(2.0),
+                });
+
+                commands.entity(bullet_entity).despawn();
+                continue;
+            }
+        }
     }
 }
