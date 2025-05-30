@@ -10,6 +10,7 @@ serde_json = "1"
 rand = "0.9.1"
 bincode = { version = "2", features = ["derive"] }
 bevy_rapier3d = "0.30"
+noise = "0.9.0"
 
 [target.'cfg(target_arch = "wasm32")']
 runner = "wasm-server-runner"

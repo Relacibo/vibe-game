@@ -54,7 +54,7 @@ fn camera_input_system(
         delta += ev.delta;
     }
     camera_control.yaw -= delta.x * 0.002;
-    camera_control.pitch = (camera_control.pitch - delta.y * 0.002).clamp(-0.3, 1.4);
+    camera_control.pitch = (camera_control.pitch + delta.y * 0.001).clamp(-0.3, 1.4);
 }
 
 fn camera_follow_system(
