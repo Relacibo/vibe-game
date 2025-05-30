@@ -1,0 +1,90 @@
+---
+import background from "../assets/background.svg";
+import Bevy from "./Bevy.astro";
+import GithubLink from "./GithubLink.astro";
+---
+
+<div id="container">
+  <img id="background" src={background.src} alt="" fetchpriority="high" />
+  <main>
+    <Bevy width={1280} height={720} />
+    <section class="hero">
+      <div class="icon-links">
+        <GithubLink href = "https://www.github.com/Relacibo/vibe-game"/>
+      </div>
+    </section>
+  </main>
+</div>
+
+<style>
+  #background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    filter: blur(100px);
+  }
+
+  #container {
+    font-family: Inter, Roboto, "Helvetica Neue", "Arial Nova", "Nimbus Sans",
+      Arial, sans-serif;
+    height: 100%;
+  }
+
+  main {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: start;
+  }
+
+  .hero {
+    display: flex;
+    align-items: end;
+    flex-direction: column;
+    justify-content: end;
+    text-align: end;
+    margin-left: auto;
+    row-gap: 16px;
+    margin-right: 8px;
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+    margin-top: 0.25em;
+  }
+
+  h2 {
+    margin: 0 0 1em;
+    font-weight: normal;
+    color: #111827;
+    font-size: 20px;
+  }
+
+  p {
+    color: #4b5563;
+    font-size: 16px;
+    line-height: 24px;
+    letter-spacing: -0.006em;
+    margin: 0;
+  }
+
+  @media screen and (max-width: 768px) {
+    #container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hero {
+      display: block;
+      padding-top: 10%;
+    }
+
+    h1 {
+      line-height: 1.5;
+    }
+  }
+</style>

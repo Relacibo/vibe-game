@@ -1,0 +1,19 @@
+[package]
+name = "vibe-game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.16", features = ["wayland", "symphonia-wav"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.9.1"
+bincode = { version = "2", features = ["derive"] }
+bevy_rapier3d = "0.30"
+
+[target.'cfg(target_arch = "wasm32")']
+runner = "wasm-server-runner"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

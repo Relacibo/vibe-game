@@ -1,0 +1,23 @@
+---
+export type Props = {
+  width: number;
+  height: number;
+};
+let { width, height } = Astro.props;
+---
+
+<script>
+  import init from "../../../dist/vibe-game";
+  
+  init().catch((error) => {
+    if (
+      !error.message.startsWith(
+        "Using exceptions for control flow, don't mind me. This isn't actually an error!"
+      )
+    ) {
+      throw error;
+    }
+  });
+</script>
+
+<canvas id={"bevy-canvas"} width={width} height={height}></canvas>
