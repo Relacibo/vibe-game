@@ -65,7 +65,7 @@ pub fn setup_skybox(
     // Ambient light
     commands.insert_resource(AmbientLight {
         color: Color::srgb_u8(210, 220, 240),
-        brightness:  200.0,
+        brightness:  40.0,
         ..default()
     });
 
