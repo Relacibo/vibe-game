@@ -21,13 +21,16 @@ pub mod game;
 use bevy::ecs::system::ParamSet;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_rapier3d::prelude::*;
-use game::player::{Player, player_movement_system};
 use game::skybox_plugin::{SkyboxHandle, SkyboxPlugin};
 use game::{
     enemy::{Bullet, Enemy},
     skybox_plugin::setup_skybox,
 };
 use game::{gui::GuiPlugin, health::Health};
+use game::{
+    pause_menu_gui::PauseMenuPlugin,
+    player::{Player, player_movement_system},
+};
 use rand::Rng;
 use rand::rng;
 
@@ -78,33 +81,41 @@ struct ExplosionSound(Handle<AudioSource>);
 #[derive(Resource, Clone)]
 struct EnemyShootSound(Handle<AudioSource>);
 
+#[derive(States, PartialEq, Eq, Clone, Copy, Debug, Hash, Default)]
+pub enum AppState {
+    #[default]
+    Running,
+    Paused,
+}
+
 // --- In deiner main() ---
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                // provide the ID selector string here
-                #[cfg(target_family = "wasm")]
-                canvas: Some("#bevy-canvas".into()),
-                // ... any other window properties ...
-                ..default()
-            }),
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            // provide the ID selector string here
+            #[cfg(target_family = "wasm")]
+            canvas: Some("#bevy-canvas".into()),
+            // ... any other window properties ...
             ..default()
-        }))
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(SkyboxPlugin)
-        .add_plugins(GuiPlugin)
-        .add_systems(Startup, setup.after(setup_skybox)) // <--- Reihenfolge explizit!
-        .add_systems(
-            Update,
+        }),
+        ..default()
+    }))
+    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    .add_plugins(SkyboxPlugin)
+    .add_plugins(GuiPlugin)
+    .add_systems(Startup, setup.after(setup_skybox)) // <--- Reihenfolge explizit!
+    .add_systems(
+        Update,
+        (
+            camera_follow_system,
+            bullet_player_collision_system,
+            bullet_enemy_collision_system, // <--- NEU
             (
                 player_movement_system,
-                camera_follow_system,
                 enemy_movement_system,
                 enemy_shooting,
-                bullet_player_collision_system,
-                bullet_enemy_collision_system, // <--- NEU
-                enemy_explosion_system,        // <--- NEU
+                enemy_explosion_system, // <--- NEU
                 bullet_lifetime_system,
                 delayed_death_system,
                 bounce_sound_system,
@@ -112,12 +123,32 @@ fn main() {
                 explosion_particle_system,
                 pending_explosion_animation_system,
                 maybe_spawn_enemy.run_if(enemy_count_under_threshold),
-            ),
+            )
+                .run_if(in_state(AppState::Running)),
+        ),
+    )
+    .configure_sets(
+        Update,
+        (
+            PhysicsSet::SyncBackend,
+            PhysicsSet::StepSimulation,
+            PhysicsSet::Writeback,
         )
-        .insert_resource(EnemySpawnDelay {
-            timer: Timer::from_seconds(1.0, TimerMode::Once),
-        })
-        .run();
+            .run_if(in_state(AppState::Running)),
+    )
+    .insert_resource(EnemySpawnDelay {
+        timer: Timer::from_seconds(1.0, TimerMode::Once),
+    });
+
+    #[cfg(target_family = "wasm")]
+    app.insert_state(AppState::Paused);
+
+    #[cfg(not(target_family = "wasm"))]
+    app.insert_state(AppState::default());
+
+    app.add_plugins(PauseMenuPlugin);
+
+    app.run();
 }
 
 fn setup(
@@ -129,8 +160,11 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     // Maus einfangen und verstecken
-    window.cursor_options.grab_mode = CursorGrabMode::Confined;
-    window.cursor_options.visible = false;
+    #[cfg(not(target_family = "wasm"))]
+    {
+        window.cursor_options.grab_mode = CursorGrabMode::Locked;
+        window.cursor_options.visible = false;
+    }
 
     // Kamera mit Skybox
     commands.spawn((
@@ -162,11 +196,12 @@ fn setup(
         ExternalForce::default(), // <-- Diese Zeile ist beim Player noch da, das ist korrekt!
         ExternalImpulse::default(),
         Friction {
-            coefficient: 0.5, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
+            coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
             combine_rule: CoefficientCombineRule::Average,
         },
         Restitution::default(),
-        AdditionalMassProperties::Mass(1.0), // Setze die Masse auf 1.0 (Standard ist oft viel höher)
+        ColliderMassProperties::Density(2.0),
+        // AdditionalMassProperties::Mass(1.0), // Setze die Masse auf 1.0 (Standard ist oft viel höher)
         // Optional: Trägheit auf sehr klein setzen, damit Rotation leicht geht
         // AdditionalMassProperties::MassProperties(MassProperties {
         //     local_center_of_mass: Vec3::ZERO,
@@ -174,7 +209,13 @@ fn setup(
         //     principal_inertia: Vec3::splat(0.01),
         //     ..default()
         // }),
-        ActiveEvents::COLLISION_EVENTS,
+        (
+            ActiveEvents::COLLISION_EVENTS,
+            Damping {
+                linear_damping: 0.5, // z.B. 0.5–2.0 testen
+                angular_damping: 0.5,
+            },
+        ),
     ));
 
     // Boden (2 km x 2 km)
@@ -224,7 +265,7 @@ fn setup(
         RigidBody::Fixed,
         Collider::cuboid(ground_size / 2.0, 0.05, ground_size / 2.0),
         Friction {
-            coefficient: 0.5, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
+            coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
             combine_rule: CoefficientCombineRule::Average,
         },
     ));
@@ -322,6 +363,11 @@ fn enemy_shooting(
                 Collider::ball(0.2),
                 Velocity::linear(shoot_direction * bullet_speed),
                 ActiveEvents::COLLISION_EVENTS,
+                ColliderMassProperties::Density(2.0),
+                Friction {
+                    coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
+                    combine_rule: CoefficientCombineRule::Average,
+                },
             ));
 
             commands.spawn((
@@ -702,8 +748,8 @@ fn maybe_spawn_enemy(
                 material: enemy_material.clone(), // <--- NEU
             },
             Damping {
-                linear_damping: 1.0, // z.B. 0.5–2.0 testen
-                angular_damping: 1.0,
+                linear_damping: 0.5, // z.B. 0.5–2.0 testen
+                angular_damping: 0.5,
             },
             Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
             MeshMaterial3d(enemy_material),
@@ -722,10 +768,13 @@ fn maybe_spawn_enemy(
             ExternalImpulse::default(),
             ExternalForce::default(),
             Velocity::default(),
-            Friction {
-                coefficient: 0.5, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
-                combine_rule: CoefficientCombineRule::Average,
-            },
+            (
+                Friction {
+                    coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
+                    combine_rule: CoefficientCombineRule::Average,
+                },
+                ColliderMassProperties::Density(2.0),
+            ),
         ));
 
         // Nach jedem Spawn neuen zufälligen Delay setzen (z.B. 0.5 bis 2.5 Sekunden)
@@ -836,10 +885,10 @@ fn explosion_particle_system(
 fn pending_explosion_animation_system(
     mut commands: Commands,
     time: Res<Time>,
-    mut query: Query<(&Enemy, &mut PendingExplosion, &mut Transform)>,
+    mut query: Query<(&Enemy, &mut PendingExplosion, &mut Transform, &mut Collider)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (enemy, mut anim, mut transform) in query.iter_mut() {
+    for (enemy, mut anim, mut transform, mut collider) in query.iter_mut() {
         anim.timer.tick(time.delta());
         let t = (anim.timer.elapsed_secs() / anim.timer.duration().as_secs_f32()).clamp(0.0, 1.0);
 
@@ -876,7 +925,11 @@ fn pending_explosion_animation_system(
         }
 
         // Interpolierte Größe
-        transform.scale = anim.start_scale.lerp(anim.end_scale, t);
+        let scale = anim.start_scale.lerp(anim.end_scale, t);
+        transform.scale = scale;
+
+        // Collider anpassen (z.B. für einen Würfel)
+        *collider = Collider::cuboid(0.5 * scale.x, 0.5 * scale.y, 0.5 * scale.z);
 
         // Nach Ablauf: NICHT despawnen, sondern ggf. Explosion auslösen!
         // (Das machst du weiterhin im enemy_explosion_system)
