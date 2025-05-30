@@ -294,7 +294,7 @@ fn enemy_shooting(
         let to_player = (player_pos - enemy_transform.translation).normalize();
         let shoot_direction = enemy_transform.forward();
 
-        let recoil_strength = 2.0; // Stärke des Rückstoßes nach Geschmack
+        let recoil_strength = 5.0; // Stärke des Rückstoßes nach Geschmack
         let recoil_dir = -shoot_direction.normalize_or_zero();
 
         impulse.impulse += recoil_dir * recoil_strength;
@@ -530,11 +530,8 @@ fn bullet_enemy_collision_system(
                 continue;
             };
 
-            // Impuls berechnen: Richtung der Kugel (ohne Y) + nach oben
-            let mut dir = bullet_velocity.linvel;
-            dir.y = 0.0;
-            let dir = dir.normalize_or_zero();
-            let impulse_vec = dir * 30.0 + Vec3::Y * 6.0;
+            let dir = bullet_velocity.linvel.normalize_or_zero();
+            let impulse_vec = dir * 60.0 + Vec3::Y * 6.0;
             impulse.impulse += impulse_vec;
 
             // Explosion vormerken
@@ -634,8 +631,10 @@ fn enemy_explosion_system(
                 if dist <= 10.0 {
                     // Impuls für alle im 10m-Radius (auch die im 1m-Kreis)
                     if let Some(mut impulse) = impulse_opt {
-                        let dir = (other_transform.translation - explosion_pos).normalize_or_zero();
-                        let strength = 35.0 * (1.0 - (dist / 10.0)).clamp(0.0, 1.0); // statt 30.0
+                        let dir = (other_transform.translation - explosion_pos)
+                            .with_y(0.0)
+                            .normalize_or_zero();
+                        let strength = 20.0 * (1.0 - (dist / 10.0)).clamp(0.0, 1.0); // statt 30.0
                         impulse.impulse += dir * strength + Vec3::Y * (strength * 0.8);
                     }
                 }
@@ -714,7 +713,7 @@ fn maybe_spawn_enemy(
             Collider::cuboid(0.5, 0.5, 0.5),
             ActiveEvents::COLLISION_EVENTS,
             EnemyShootTimer {
-                timer: Timer::from_seconds(1.5, TimerMode::Repeating),
+                timer: Timer::from_seconds(5.0, TimerMode::Repeating),
             },
             EnemyMovement {
                 direction: Vec3::Z,
@@ -865,6 +864,15 @@ fn pending_explosion_animation_system(
         );
         if let Some(mat) = materials.get_mut(&enemy.material) {
             mat.base_color = color;
+
+            // Leuchteffekt: Emissive-Farbe interpoliert von 0 auf maximal
+            let emissive_strength = t * 8.0; // Anfangs 0, am Ende maximal
+            mat.emissive = LinearRgba::new(
+                1.0 * emissive_strength,
+                1.0 * emissive_strength,
+                0.2 * emissive_strength,
+                1.0,
+            );
         }
 
         // Interpolierte Größe
