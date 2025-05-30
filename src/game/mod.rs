@@ -5,3 +5,5 @@ pub mod network;
 pub mod skybox_plugin;
 pub mod gui;
 pub mod pause_menu_gui;
+pub mod bullet;
+pub mod camera;
