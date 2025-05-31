@@ -1,9 +1,6 @@
 import bpy
 import os
 
-# Addon für OBJ-Import aktivieren (wichtig!)
-bpy.ops.preferences.addon_enable(module="io_scene_obj")
-
 # Zielordner für Input und Output
 base_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'models', 'trees'))
 input_folder = base_folder
@@ -25,11 +22,11 @@ for idx in sorted(ids, key=lambda x: int(x)):
     obj_path = os.path.join(input_folder, f"tree_{idx}.obj")
 
     if os.path.exists(trunk_path):
-        bpy.ops.import_scene.obj(filepath=trunk_path)
+        bpy.ops.wm.obj_import(filepath=trunk_path)
     if os.path.exists(crown_path):
-        bpy.ops.import_scene.obj(filepath=crown_path)
+        bpy.ops.wm.obj_import(filepath=crown_path)
     if os.path.exists(obj_path):
-        bpy.ops.import_scene.obj(filepath=obj_path)
+        bpy.ops.wm.obj_import(filepath=obj_path)
 
     # Exportiere alles als eine GLB-Datei
     glb_path = os.path.join(output_folder, f"tree_{idx}.glb")

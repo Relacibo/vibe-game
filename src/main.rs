@@ -66,7 +66,10 @@ fn main() {
     .add_plugins(EnemyPlugin)
     .add_plugins(CameraPlugin)
     .add_plugins(PlayerPlugin)
-    .add_systems(Startup, (setup.after(setup_skybox), spawn_trees.after(setup))) // <--- Reihenfolge explizit!
+    .add_systems(
+        Startup,
+        (setup.after(setup_skybox), spawn_trees.after(setup)),
+    ) // <--- Reihenfolge explizit!
     .configure_sets(
         Update,
         (
@@ -90,21 +93,13 @@ fn main() {
 
 #[derive(Resource)]
 struct Trees {
-    obj_handles: [Handle<Mesh>; 12],
-    trunk_textures: [Handle<Image>; 12],
-    crown_textures: [Handle<Image>; 12],
+    scene_handles: [Handle<Scene>; 12],
 }
 
 impl Trees {
-    fn new(
-        obj_handles: [Handle<Mesh>; 12],
-        trunk_textures: [Handle<Image>; 12],
-        crown_textures: [Handle<Image>; 12],
-    ) -> Self {
+    fn new(mesh_handles: [Handle<Scene>; 12]) -> Self {
         Self {
-            obj_handles,
-            trunk_textures,
-            crown_textures,
+            scene_handles: mesh_handles,
         }
     }
 }
@@ -219,18 +214,15 @@ fn setup(
         Vec3::new(-1000.0, 5.0, 0.0),
     ); // West
 
-    // Bäume-Assets laden
-    let mut obj_handles: [Handle<Mesh>; 12] = Default::default();
-    let mut trunk_textures: [Handle<Image>; 12] = Default::default();
-    let mut crown_textures: [Handle<Image>; 12] = Default::default();
-
-    for i in 0..12 {
-        obj_handles[i] = asset_server.load(format!("models/trees/tree_{i}.obj"));
-        trunk_textures[i] = asset_server.load(format!("models/trees/tree_{i}_trunk.png"));
-        crown_textures[i] = asset_server.load(format!("models/trees/tree_{i}_crown.png"));
+    // Bäume-GLB-Scenes laden
+    let mut mesh_handles: [Handle<Scene>; 12] = Default::default();
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..mesh_handles.len() {
+        mesh_handles[i] = asset_server
+            .load(GltfAssetLabel::Scene(0).from_asset(format!("models/trees/tree_{i}.glb#Scene0")));
     }
 
-    commands.insert_resource(Trees::new(obj_handles, trunk_textures, crown_textures));
+    commands.insert_resource(Trees::new(mesh_handles));
 }
 
 fn spawn_wall(
@@ -250,65 +242,29 @@ fn spawn_wall(
     ));
 }
 
-fn spawn_trees(
-    mut commands: Commands,
-    trees: Res<Trees>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+use bevy::scene::SceneSpawner;
+
+fn spawn_trees(mut commands: Commands, trees: Res<Trees>, mut scene_spawner: ResMut<SceneSpawner>) {
     let perlin = Perlin::new(42);
     let mut rng = rand::rng();
 
     let ground_size = 2000.0;
-    let tree_count = 60;
+    let tree_count = 3000;
     let mut spawned = 0;
     let mut tries = 0;
 
     while spawned < tree_count && tries < tree_count * 10 {
         tries += 1;
-        // Position im Bereich [-ground_size/2, ground_size/2]
         let x = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
         let z = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
 
-        // Perlin-Noise für Wäldchen
         let noise_val = perlin.get([x as f64 / 300.0, z as f64 / 300.0]);
         if noise_val > 0.15 {
-            // Schwelle für Wäldchen
-            // Zufälliger Baumtyp
             let idx = rng.random_range(0..12);
 
-            // Mesh laden
-            let mesh_handle = trees.obj_handles[idx].clone();
-            let trunk_tex = trees.trunk_textures[idx].clone();
-            let crown_tex = trees.crown_textures[idx].clone();
-
-            // Materialien
-            let trunk_mat = materials.add(StandardMaterial {
-                base_color_texture: Some(trunk_tex),
-                perceptual_roughness: 0.8,
-                ..default()
-            });
-            let crown_mat = materials.add(StandardMaterial {
-                base_color_texture: Some(crown_tex),
-                perceptual_roughness: 0.5,
-                ..default()
-            });
-
-            // Baumstamm (unten, Collider)
             commands.spawn((
-                Mesh3d(mesh_handle.clone()),
-                MeshMaterial3d(trunk_mat),
+                SceneRoot(trees.scene_handles[idx].clone()),
                 Transform::from_xyz(x, 0.0, z),
-                Visibility::Visible,
-                Collider::cylinder(0.15, 0.75), // Radius, halbe Höhe
-                RigidBody::Fixed,
-            ));
-
-            // Baumkrone (oben, kein Collider)
-            commands.spawn((
-                Mesh3d(mesh_handle),
-                MeshMaterial3d(crown_mat),
-                Transform::from_xyz(x, 1.5, z),
                 Visibility::Visible,
             ));
 
