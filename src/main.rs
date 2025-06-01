@@ -1,3 +1,4 @@
+use bevy::math::primitives::*;
 use bevy::{
     audio::{self, AudioPlayer, PlaybackSettings},
     core_pipeline::Skybox,
@@ -143,9 +144,9 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut window: Single<&mut Window, With<PrimaryWindow>>,
-    skybox_handle: Res<SkyboxHandle>,
     asset_server: Res<AssetServer>,
+    skybox_handle: Res<SkyboxHandle>,
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
     // Maus einfangen und verstecken
     #[cfg(not(target_family = "wasm"))]
@@ -177,28 +178,51 @@ fn setup(
             ..default()
         }
     });
+    let mud_normal =
+        asset_server.load_with_settings("textures/mud_ground_normal.png", |s: &mut _| {
+            *s = ImageLoaderSettings {
+                sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    ..default()
+                }),
+                ..default()
+            }
+        });
+    let mud_gloss =
+        asset_server.load_with_settings("textures/mud_ground_gloss.png", |s: &mut _| {
+            *s = ImageLoaderSettings {
+                sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    ..default()
+                }),
+                ..default()
+            }
+        });
+
     let mud_material = materials.add(StandardMaterial {
         base_color_texture: Some(mud_texture),
-        perceptual_roughness: 1.0,
+        normal_map_texture: Some(mud_normal),
+        metallic_roughness_texture: Some(mud_gloss), // Glossmap als Roughness-Map
+        perceptual_roughness: 0.7,
         reflectance: 0.05,
         ..default()
     });
 
-    // Plane3d-Mesh mit richtiger Größe erzeugen
-    let plane_mesh = Plane3d::default()
-        .mesh()
-        .size(ground_size, ground_size)
-        .subdivisions(10);
-    let mesh_handle = meshes.add(plane_mesh);
+    let mesh_handle = meshes.add(Mesh::from(Plane3d {
+        normal: Dir3::Y,
+        half_size: Vec2::splat(ground_size / 2.0),
+    }));
 
-    // UVs anpassen (Kacheln, damit die Textur nicht zu groß gestreckt wird)
+    // UVs anpassen für Kachelung
     if let Some(mesh) = meshes.get_mut(&mesh_handle) {
         if let Some(VertexAttributeValues::Float32x2(uvs)) =
             mesh.attribute_mut(Mesh::ATTRIBUTE_UV_0)
         {
             for uv in uvs.iter_mut() {
-                uv[0] *= ground_size / 64.0; // 2000/64 = 31.25 Kacheln in X
-                uv[1] *= ground_size / 64.0; // 2000/64 = 31.25 Kacheln in Y
+                uv[0] *= ground_size / 32.0; // 32.0 = sehr oft gekachelt!
+                uv[1] *= ground_size / 32.0;
             }
         }
     }
@@ -218,7 +242,7 @@ fn setup(
     ));
 
     // Wände (jeweils 2 km lang, 10 m hoch, 1 m dick)
-    let wall_color = Color::from(Srgba::new(0.8, 0.8, 0.8, 1.0));
+    let wall_color = Color::srgb(0.8, 0.8, 0.8);
     let wall_material = materials.add(wall_color);
     spawn_wall(
         &mut commands,
@@ -253,6 +277,7 @@ fn setup(
     commands.insert_resource(Trees::new(&asset_server));
 }
 
+// Walls-Hilfsfunktion (wie gehabt)
 fn spawn_wall(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

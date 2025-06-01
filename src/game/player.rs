@@ -60,7 +60,7 @@ fn setup(
             ActiveEvents::COLLISION_EVENTS,
             Damping {
                 linear_damping: 0.5,
-                angular_damping: 1.0,
+                angular_damping: 2.0,
             },
         ),
     ));

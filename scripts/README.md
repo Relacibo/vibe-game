@@ -74,6 +74,36 @@ blender --background --python batch_obj_to_gltf.py
 
 ---
 
+## 🟫 Schlammige Bodentexturen generieren
+
+**Script:** `generate_mud_texture.py`
+
+**Voraussetzungen:**  
+- Python 3  
+- Pakete: `Pillow`, `numpy`  
+  Installation:  
+  ```sh
+  pip install pillow numpy
+  ```
+
+**Verwendung:**  
+```sh
+python3 generate_mud_texture.py
+```
+- Erstellt drei nahtlose Texturen direkt im Ordner `assets/textures/`:
+  - **mud_ground.png**: Farbbild (Albedo) des Bodens
+  - **mud_ground_normal.png**: Normalmap/Bumpmap für plastische Beleuchtung
+  - **mud_ground_gloss.png**: Glossmap (Glanz/Feuchtigkeit, Moos ist matter)
+
+**Verwendung in Bevy:**  
+- `mud_ground.png` als `base_color_texture`
+- `mud_ground_normal.png` als `normal_map_texture`
+- `mud_ground_gloss.png` z.B. als `metallic_roughness_texture` oder für eigene Shader
+
+_Tipp: Passe die Parameter im Skript an, um mehr oder weniger Moos, größere Flecken oder andere Farben zu erhalten!_
+
+---
+
 ## 💡 Hinweise & Tipps
 
 - Die Collider-JSON-Dateien sorgen dafür, dass die Bäume in Bevy exakt und performant kollidieren – sogar mit separatem Collider für Stamm und Krone!
