@@ -35,6 +35,7 @@ use game::{gui::GuiPlugin, health::Health};
 use game::{pause_menu_gui::PauseMenuPlugin, player::Player};
 use rand::Rng;
 use rand::rng;
+use serde::Deserialize;
 
 #[derive(Component)]
 struct Ground;
@@ -44,6 +45,50 @@ pub enum AppState {
     #[default]
     Running,
     Paused,
+}
+
+#[derive(Deserialize, Clone)]
+struct ColliderPart {
+    center: [f32; 3],
+    radius: f32,
+    height: f32,
+}
+
+#[derive(Deserialize, Clone)]
+struct TreeColliderInfo {
+    trunk: ColliderPart,
+    crown: ColliderPart,
+}
+
+#[derive(Clone)]
+struct Tree {
+    scene_handle: Handle<Scene>,
+    collider_info: TreeColliderInfo,
+}
+
+#[derive(Resource)]
+struct Trees {
+    trees: Vec<Tree>,
+}
+
+impl Trees {
+    fn new(asset_server: &Res<AssetServer>) -> Self {
+        let mut trees = Vec::with_capacity(12);
+        for i in 0..12 {
+            let scene_handle = asset_server.load(format!("models/trees/tree_{i}.glb#Scene0"));
+            let json_path = format!("assets/models/trees/tree_{i}_collider.json");
+            let collider_info: TreeColliderInfo = {
+                let json_str = std::fs::read_to_string(&json_path)
+                    .unwrap_or_else(|_| panic!("Fehlende Collider-JSON: {json_path}"));
+                serde_json::from_str(&json_str).expect("Fehler beim Parsen der Collider-JSON")
+            };
+            trees.push(Tree {
+                scene_handle,
+                collider_info,
+            });
+        }
+        Self { trees }
+    }
 }
 
 // --- In deiner main() ---
@@ -89,19 +134,6 @@ fn main() {
     app.add_plugins(PauseMenuPlugin);
 
     app.run();
-}
-
-#[derive(Resource)]
-struct Trees {
-    scene_handles: [Handle<Scene>; 12],
-}
-
-impl Trees {
-    fn new(mesh_handles: [Handle<Scene>; 12]) -> Self {
-        Self {
-            scene_handles: mesh_handles,
-        }
-    }
 }
 
 fn setup(
@@ -214,14 +246,8 @@ fn setup(
         Vec3::new(-1000.0, 5.0, 0.0),
     ); // West
 
-    // Bäume-GLB-Scenes laden
-    let mut mesh_handles: [Handle<Scene>; 12] = Default::default();
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..mesh_handles.len() {
-        mesh_handles[i] = asset_server
-            .load(format!("models/trees/tree_{i}.glb#Scene0"));
-    }
-    commands.insert_resource(Trees::new(mesh_handles));
+    // Trees-Resource mit Collider-Infos laden
+    commands.insert_resource(Trees::new(&asset_server));
 }
 
 fn spawn_wall(
@@ -269,12 +295,31 @@ fn spawn_trees(mut commands: Commands, trees: Res<Trees>) {
                 let dz = pz - z;
                 (dx * dx + dz * dz).sqrt() >= min_distance
             }) {
-                let idx = rng.random_range(0..12);
+                let idx = rng.random_range(0..trees.trees.len());
+                let tree = &trees.trees[idx];
+                let trunk = &tree.collider_info.trunk;
+                let crown = &tree.collider_info.crown;
 
                 commands.spawn((
-                    SceneRoot(trees.scene_handles[idx].clone()),
-                    Transform::from_xyz(x, 0.0, z),
+                    SceneRoot(tree.scene_handle.clone()),
+                    Transform {
+                        translation: Vec3::new(x, 0.0, z),
+                        scale: Vec3::splat(3.0),
+                        ..Default::default()
+                    },
                     Visibility::Visible,
+                    children![
+                        (
+                            Collider::cylinder(trunk.height / 2.0, trunk.radius),
+                            Transform::from_xyz(trunk.center[0], trunk.center[1], trunk.center[2]),
+                            RigidBody::Fixed,
+                        ),
+                        (
+                            Collider::cylinder(crown.height / 2.0, crown.radius),
+                            Transform::from_xyz(crown.center[0], crown.center[1], crown.center[2]),
+                            RigidBody::Fixed,
+                        ),
+                    ],
                 ));
 
                 tree_positions.push((x, z));

@@ -2,6 +2,7 @@ import trimesh
 import numpy as np
 from PIL import Image, ImageDraw
 import os
+import json
 
 output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'models', 'trees'))
 os.makedirs(output_dir, exist_ok=True)
@@ -288,5 +289,23 @@ for i in range(12):
     generate_crown_texture(os.path.join(output_dir, f"tree_{i}_crown.png"))
     generate_trunk_bump(os.path.join(output_dir, f"tree_{i}_trunk_bump.png"))
     generate_crown_bump(os.path.join(output_dir, f"tree_{i}_crown_bump.png"))
+
+    # Collider-Informationen speichern
+    crown_center_y = trunk_height + crown_radius
+    crown_height = np.random.uniform(0.3, 0.7) * trunk_height
+    tree_info = {
+        "trunk": {
+            "center": [0, 0.6, 0],
+            "radius": trunk_radius,
+            "height": trunk_height,
+        },
+        "crown": {
+            "center": [0, crown_center_y, 0],
+            "radius": crown_radius,
+            "height": crown_height,
+        }
+    }
+    with open(os.path.join(output_dir, f"tree_{i}_collider.json"), "w") as f:
+        json.dump(tree_info, f)
 
 print("Alle Bäume und Texturen generiert!")
