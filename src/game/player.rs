@@ -23,11 +23,12 @@ impl Plugin for PlayerPlugin {
 #[derive(Component)]
 pub struct Player {
     pub speed: f32,
+    pub acceleration: f32,
 }
 
 impl Player {
-    pub fn new(speed: f32) -> Self {
-        Player { speed }
+    pub fn new(speed: f32, acceleration: f32) -> Self {
+        Player { speed, acceleration }
     }
 }
 
@@ -38,7 +39,7 @@ fn setup(
 ) {
     // Player (blauer Würfel)
     commands.spawn((
-        Player { speed: 5.0 },
+        Player { speed: 12.0, acceleration: 60.0 }, // <--- Beschleunigung hier setzen!
         Health { value: 100.0 },
         Mesh3d(meshes.add(Cuboid::new(1.2, 1.2, 1.2))),
         MeshMaterial3d(materials.add(Color::from(Srgba::new(0.2, 0.2, 1.0, 1.0)))),
@@ -92,7 +93,7 @@ fn player_movement_system(
         }
         move_dir = move_dir.normalize_or_zero();
 
-        let move_force = 20.0;
+        let move_force = player.acceleration; // <-- jetzt aus Player struct!
         let max_speed = player.speed;
 
         let vel_in_dir = velocity.linvel.dot(move_dir);

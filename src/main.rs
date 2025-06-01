@@ -219,9 +219,8 @@ fn setup(
     #[allow(clippy::needless_range_loop)]
     for i in 0..mesh_handles.len() {
         mesh_handles[i] = asset_server
-            .load(GltfAssetLabel::Scene(0).from_asset(format!("models/trees/tree_{i}.glb#Scene0")));
+            .load(format!("models/trees/tree_{i}.glb#Scene0"));
     }
-
     commands.insert_resource(Trees::new(mesh_handles));
 }
 
