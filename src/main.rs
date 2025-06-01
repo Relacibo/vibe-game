@@ -25,6 +25,7 @@ use bevy::ecs::system::ParamSet;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_rapier3d::prelude::*;
 use game::{
+    background_music_plugin::BackgroundMusicPlugin,
     bullet::{Bullet, BulletLifetime, BulletPlugin, bullet_collision_system},
     camera::CameraPlugin,
     enemy::EnemyPlugin,
@@ -75,7 +76,8 @@ impl Trees {
     fn new(asset_server: &Res<AssetServer>) -> Self {
         let trees: [Tree; 12] = std::array::from_fn(|i| {
             let scene_handle = asset_server.load(format!("models/trees/tree_{i}.glb#Scene0"));
-            let collider_info = asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
+            let collider_info =
+                asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
             Tree {
                 scene_handle,
                 collider_info,
@@ -99,6 +101,7 @@ fn main() {
         ..default()
     }))
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    .add_plugins(BackgroundMusicPlugin)
     .add_plugins(SkyboxPlugin)
     .add_plugins(GuiPlugin)
     .add_plugins(BulletPlugin)
@@ -106,7 +109,9 @@ fn main() {
     .add_plugins(CameraPlugin)
     .add_plugins(PlayerPlugin)
     .add_plugins(PauseMenuPlugin)
-    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&["tree_collider.json"]))
+    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&[
+        "tree_collider.json",
+    ]))
     .add_systems(
         Startup,
         (setup.after(setup_skybox), spawn_trees.after(setup)),
@@ -162,7 +167,7 @@ fn setup(
 
     // Boden (2 km x 2 km)
     let ground_size = 2000.0;
-    let tiles_texture = asset_server.load_with_settings("textures/tiles.png", |s: &mut _| {
+    let mud_texture = asset_server.load_with_settings("textures/mud_ground.png", |s: &mut _| {
         *s = ImageLoaderSettings {
             sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
                 address_mode_u: ImageAddressMode::Repeat,
@@ -172,10 +177,10 @@ fn setup(
             ..default()
         }
     });
-    let tiles_material = materials.add(StandardMaterial {
-        base_color_texture: Some(tiles_texture),
-        perceptual_roughness: 0.9,
-        reflectance: 0.1,
+    let mud_material = materials.add(StandardMaterial {
+        base_color_texture: Some(mud_texture),
+        perceptual_roughness: 1.0,
+        reflectance: 0.05,
         ..default()
     });
 
@@ -186,28 +191,28 @@ fn setup(
         .subdivisions(10);
     let mesh_handle = meshes.add(plane_mesh);
 
-    // UVs anpassen (Kacheln)
+    // UVs anpassen (Kacheln, damit die Textur nicht zu groß gestreckt wird)
     if let Some(mesh) = meshes.get_mut(&mesh_handle) {
         if let Some(VertexAttributeValues::Float32x2(uvs)) =
             mesh.attribute_mut(Mesh::ATTRIBUTE_UV_0)
         {
             for uv in uvs.iter_mut() {
-                uv[0] *= ground_size / 100.0; // z.B. 1000 Kacheln in X
-                uv[1] *= ground_size / 100.0; // z.B. 1000 Kacheln in Y
+                uv[0] *= ground_size / 64.0; // 2000/64 = 31.25 Kacheln in X
+                uv[1] *= ground_size / 64.0; // 2000/64 = 31.25 Kacheln in Y
             }
         }
     }
 
     commands.spawn((
-        Ground, // <--- Tag-Komponente
+        Ground,
         Mesh3d(mesh_handle),
-        MeshMaterial3d(tiles_material),
+        MeshMaterial3d(mud_material),
         Transform::from_xyz(0.0, -0.05, 0.0),
         Visibility::Visible,
         RigidBody::Fixed,
         Collider::cuboid(ground_size / 2.0, 0.05, ground_size / 2.0),
         Friction {
-            coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
+            coefficient: 0.1,
             combine_rule: CoefficientCombineRule::Average,
         },
     ));
@@ -347,7 +352,10 @@ fn update_tree_colliders(
         if dist < cull_distance && !has_collider {
             // Collider SPAWNEN
             let tree = &trees.trees[tree_root.idx];
-            let collider_info = collider_infos.get(&tree.collider_info).unwrap();
+            let Some(collider_info) = collider_infos.get(&tree.collider_info) else {
+                warn!("Collider not present! {}", tree_root.idx);
+                return;
+            };
 
             let TreeColliderInfo { trunk, crown } = collider_info;
 
