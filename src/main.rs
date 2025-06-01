@@ -115,6 +115,10 @@ fn main() {
         Startup,
         (setup.after(setup_skybox), spawn_trees.after(setup)),
     ) // <--- Reihenfolge explizit!
+    .add_systems(
+        Update,
+        update_tree_colliders.run_if(in_state(AppState::Running)),
+    )
     .configure_sets(
         Update,
         (
@@ -272,7 +276,7 @@ fn spawn_trees(mut commands: Commands, trees: Res<Trees>) {
     let mut rng = rand::rng();
 
     let ground_size = 2000.0;
-    let tree_count = 3000;
+    let tree_count = 800;
     let min_distance = 6.0; // Mindestabstand zwischen Bäumen
     let mut spawned = 0;
     let mut tries = 0;
@@ -297,33 +301,80 @@ fn spawn_trees(mut commands: Commands, trees: Res<Trees>) {
             }) {
                 let idx = rng.random_range(0..trees.trees.len());
                 let tree = &trees.trees[idx];
-                let trunk = &tree.collider_info.trunk;
-                let crown = &tree.collider_info.crown;
+
+                let y_rot = rng.random_range(0.0..std::f32::consts::TAU);
 
                 commands.spawn((
                     SceneRoot(tree.scene_handle.clone()),
                     Transform {
                         translation: Vec3::new(x, 0.0, z),
+                        rotation: Quat::from_rotation_y(y_rot),
                         scale: Vec3::splat(3.0),
-                        ..Default::default()
                     },
                     Visibility::Visible,
-                    children![
-                        (
-                            Collider::cylinder(trunk.height / 2.0, trunk.radius),
-                            Transform::from_xyz(trunk.center[0], trunk.center[1], trunk.center[2]),
-                            RigidBody::Fixed,
-                        ),
-                        (
-                            Collider::cylinder(crown.height / 2.0, crown.radius),
-                            Transform::from_xyz(crown.center[0], crown.center[1], crown.center[2]),
-                            RigidBody::Fixed,
-                        ),
-                    ],
+                    RigidBody::Fixed,
+                    TreeRoot { idx },
                 ));
 
                 tree_positions.push((x, z));
                 spawned += 1;
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+struct TreeRoot {
+    idx: usize, // Index im Trees-Array
+}
+
+#[derive(Component)]
+struct TreeCollider;
+
+fn update_tree_colliders(
+    mut commands: Commands,
+    player_query: Single<&Transform, With<Player>>,
+    tree_query: Query<(Entity, &Transform, &TreeRoot, Option<&Children>)>,
+    collider_query: Query<&TreeCollider>,
+    trees: Res<Trees>,
+) {
+    let player_pos = player_query.translation;
+    let cull_distance = 80.0; // z.B. 80 Meter
+
+    for (entity, tree_transform, tree_root, children) in tree_query.iter() {
+        let tree_pos = tree_transform.translation;
+        let dist = player_pos.distance(tree_pos);
+
+        let has_collider = children
+            .map(|c| c.iter().any(|child| collider_query.get(child).is_ok()))
+            .unwrap_or(false);
+
+        if dist < cull_distance && !has_collider {
+            // Collider SPAWNEN
+            let tree = &trees.trees[tree_root.idx];
+            let trunk = &tree.collider_info.trunk;
+            let crown = &tree.collider_info.crown;
+
+            commands.entity(entity).with_children(|parent| {
+                parent.spawn((
+                    Collider::cylinder(trunk.height / 2.0, trunk.radius),
+                    Transform::from_xyz(trunk.center[0], trunk.center[1], trunk.center[2]),
+                    TreeCollider,
+                ));
+                parent.spawn((
+                    Collider::ball(crown.radius),
+                    Transform::from_xyz(crown.center[0], crown.center[1], crown.center[2]),
+                    TreeCollider,
+                ));
+            });
+        } else if dist >= cull_distance && has_collider {
+            // Collider ENTFERNEN
+            if let Some(children) = children {
+                for &child in children {
+                    if collider_query.get(child).is_ok() {
+                        commands.entity(child).despawn();
+                    }
+                }
             }
         }
     }
