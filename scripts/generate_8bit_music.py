@@ -11,157 +11,153 @@ output_path = os.path.join(output_dir, "vibe_8bit_theme.mid")
 C_MAJOR = [60, 62, 64, 65, 67, 69, 71, 72]  # C D E F G A B C
 CHORDS = {
     "I":  [60, 64, 67],      # C E G
-    "ii": [62, 65, 69],      # D F A
-    "iii":[64, 67, 71],      # E G B
     "IV": [65, 69, 72],      # F A C
     "V":  [67, 71, 74],      # G B D
     "vi": [69, 72, 76],      # A C E
     "V7": [67, 71, 74, 77],  # G B D F
 }
 
-PROGRESSIONS = [
-    ["I", "IV", "V", "I"],
-    ["I", "vi", "IV", "V"],
-    ["I", "V", "vi", "IV"],
-    ["I", "IV", "I", "V"],
-    ["I", "V7", "I", "IV", "V", "I"]
+PROGRESSION = ["I", "IV", "V", "I", "vi", "IV", "V", "I"] * 4
+
+RHYTHM_PATTERNS = [
+    [480, 480, 480, 480],
+    [240, 240, 480, 480],
+    [360, 120, 360, 120, 480],
+    [320, 160, 320, 160, 320],
+    [480, 240, 240, 480],
+    [720, 240, 480],
+    [240, 240, 240, 240, 480],
 ]
 
-def choose_progression():
-    return random.choice(PROGRESSIONS)
+def make_melody_motif(scale, start_note, length=4):
+    motif = [start_note]
+    for _ in range(length - 1):
+        last = motif[-1]
+        options = [n for n in scale if abs(n - last) in [2, 4] and n != last]
+        if not options:
+            options = scale
+        motif.append(random.choice(options))
+    return motif
 
-def make_melody_for_chord(chord, prev_note=None, length=4):
-    # Melodie bleibt auf Akkordtönen, mit gelegentlichen Durchgangsnoten
+def make_melody_for_chord(chord, scale, prev_note, length, rhythm):
     melody = []
-    chord_tones = chord
-    scale = C_MAJOR
+    last_note = prev_note
     for i in range(length):
-        if i == 0 and prev_note is not None:
-            # Schrittweise Bewegung von vorherigem Ton
-            options = [n for n in chord_tones if abs(n - prev_note) <= 5]
-            note = random.choice(options) if options else random.choice(chord_tones)
+        if i == 0 and last_note is not None:
+            options = [n for n in chord if abs(n - last_note) <= 4]
+            note = random.choice(options) if options else random.choice(chord)
         elif random.random() < 0.8:
-            note = random.choice(chord_tones)
+            step_options = [n for n in chord if abs(n - last_note) in [2, 4]]
+            note = random.choice(step_options) if step_options else random.choice(chord)
         else:
-            # Durchgangsnote zwischen zwei Akkordtönen
-            idx = random.randint(0, len(chord_tones)-2)
-            low = chord_tones[idx]
-            high = chord_tones[idx+1]
-            between = [n for n in scale if low < n < high]
-            note = random.choice(between) if between else random.choice(chord_tones)
+            idx = scale.index(last_note) if last_note in scale else 0
+            if idx > 0 and idx < len(scale) - 1:
+                note = scale[idx + random.choice([-1, 1])]
+            else:
+                note = last_note
         melody.append(note)
-        prev_note = note
-    return melody
+        last_note = note
+    return melody, last_note
 
-def make_colloratur(bar_root, length=8):
-    # Durchgehende Achtelnoten, auf Skala, um bar_root herum
-    idx = C_MAJOR.index(bar_root)
-    notes = []
-    for i in range(length):
-        offset = random.choice([-2, -1, 0, 1, 2])
-        nidx = max(0, min(len(C_MAJOR)-1, idx + offset))
-        notes.append(C_MAJOR[nidx] + 12)
-    return notes
-
-def make_bass_for_chord(chord, length=4):
-    root = chord[0]
-    fifth = chord[2]
-    bass = []
+def make_background_for_chord(chord, length, rhythm):
+    # Dezente Akkordstimme: meist Haltenoten oder punktierte Noten, selten Synkopen
+    bg = []
     for i in range(length):
         if i == 0:
-            bass.append(root)
-        elif i == length-1 and random.random() < 0.3:
-            bass.append(root + 12)  # Oktave für Abschluss
+            # Akkordton (Terz oder Quinte, nicht Grundton)
+            note = random.choice(chord[1:])
+            bg.append(note)
+        elif random.random() < 0.2:
+            # Pause für Luft
+            bg.append(None)
         else:
-            bass.append(fifth if random.random() < 0.5 else root)
-    return bass
+            # Haltenote oder Wiederholung
+            bg.append(bg[-1] if bg else random.choice(chord[1:]))
+    return bg
 
-def make_chord_track(chord, length=4):
+def make_bass_for_chord(chord, length, rhythm):
+    # Bass: Grundton, Quinte, Grundton, Oktave
+    root = chord[0] - 12
+    fifth = chord[2] - 12
     notes = []
     for i in range(length):
-        if i % 2 == 0:
-            notes.append(chord)
+        if i % 4 == 0:
+            notes.append(root)
+        elif i % 4 == 2:
+            notes.append(fifth)
+        elif random.random() < 0.2:
+            notes.append(root + 12)
         else:
-            notes.append([])
+            notes.append(root)
     return notes
 
-def write_melody(track, melody, rhythm, channel=0, velocity=100):
-    for note, dur in zip(melody, rhythm):
+def write_track(track, notes, rhythm, channel=0, velocity=100):
+    for note, dur in zip(notes, rhythm):
         if note is not None:
             track.append(Message('note_on', note=note, velocity=velocity, time=0, channel=channel))
             track.append(Message('note_off', note=note, velocity=velocity, time=dur, channel=channel))
         else:
             track.append(Message('note_off', note=60, velocity=0, time=dur, channel=channel))
 
-def write_bass(track, bass, rhythm, channel=1, velocity=80):
-    for note, dur in zip(bass, rhythm):
-        if note is not None:
-            track.append(Message('note_on', note=note-12, velocity=velocity, time=0, channel=channel))
-            track.append(Message('note_off', note=note-12, velocity=velocity, time=dur, channel=channel))
-        else:
-            track.append(Message('note_off', note=48, velocity=0, time=dur, channel=channel))
-
-def write_chords(track, chords, rhythm, channel=2, velocity=60):
-    for chord, dur in zip(chords, rhythm):
-        if chord:
-            for note in chord:
-                track.append(Message('note_on', note=note, velocity=velocity, time=0, channel=channel))
-            for note in chord:
-                track.append(Message('note_off', note=note, velocity=velocity, time=dur, channel=channel))
-        else:
-            track.append(Message('note_off', note=60, velocity=0, time=dur, channel=channel))
-
 def main():
     mid = MidiFile(ticks_per_beat=480)
-    tempo = mido.bpm2tempo(132)
+    tempo = mido.bpm2tempo(120)
     mid.tracks.append(MidiTrack([mido.MetaMessage('set_tempo', tempo=tempo)]))
 
-    progression = choose_progression() * 8  # ca. 32 Takte
     melody = []
+    background = []
     bass = []
-    chords = []
     rhythm = []
-    prev_note = None
+    last_note = 60  # C4
 
-    for i, chord_name in enumerate(progression):
+    # Melodie-orientierter Anfang (nur Melodie, 4 Takte, motivisch)
+    motif = make_melody_motif(C_MAJOR, last_note, length=4)
+    for _ in range(2):
+        pattern = random.choice(RHYTHM_PATTERNS)
+        melody += motif[:len(pattern)]
+        background += [None] * len(pattern)
+        bass += [None] * len(pattern)
+        rhythm += pattern
+        last_note = melody[-1]
+
+    motif2 = [n + random.choice([-2, 0, 2]) for n in motif]
+    for _ in range(2):
+        pattern = random.choice(RHYTHM_PATTERNS)
+        melody += motif2[:len(pattern)]
+        background += [None] * len(pattern)
+        bass += [None] * len(pattern)
+        rhythm += pattern
+        last_note = melody[-1]
+
+    # Jetzt Akkorde und Bass dazu, Melodie bleibt im Vordergrund
+    for chord_name in PROGRESSION:
         chord = CHORDS[chord_name]
-        # Rhythmus: Abwechslung
-        if random.random() < 0.15:
-            # Colloratur-Passage (durchgehende Achtel)
-            bar_rhythm = [240]*8
-            bar_melody = make_colloratur(chord[0], length=8)
-            bar_bass = make_bass_for_chord(chord, length=8)
-            bar_chords = make_chord_track(chord, length=8)
-        elif random.random() < 0.1:
-            # Synkope
-            bar_rhythm = [360, 120, 480, 480]
-            bar_melody = make_melody_for_chord(chord, prev_note, length=4)
-            bar_bass = make_bass_for_chord(chord, length=4)
-            bar_chords = make_chord_track(chord, length=4)
-        else:
-            # Standard
-            bar_rhythm = [240, 240, 480, 480]
-            bar_melody = make_melody_for_chord(chord, prev_note, length=4)
-            bar_bass = make_bass_for_chord(chord, length=4)
-            bar_chords = make_chord_track(chord, length=4)
-        prev_note = bar_melody[-1]
-        rhythm += bar_rhythm
+        scale = C_MAJOR
+        pattern = random.choice(RHYTHM_PATTERNS)
+        bar_len = len(pattern)
+        bar_melody, last_note = make_melody_for_chord(chord, scale, last_note, bar_len, pattern)
+        bar_background = make_background_for_chord(chord, bar_len, pattern)
+        bar_bass = make_bass_for_chord(chord, bar_len, pattern)
         melody += bar_melody
+        background += bar_background
         bass += bar_bass
-        chords += bar_chords
+        rhythm += pattern
 
     # Tracks schreiben
     melody_track = MidiTrack()
-    write_melody(melody_track, melody, rhythm)
+    melody_track.append(Message('program_change', program=81, time=0))      # Lead 1 (square)
+    write_track(melody_track, melody, rhythm, channel=0, velocity=110)
     mid.tracks.append(melody_track)
 
-    bass_track = MidiTrack()
-    write_bass(bass_track, bass, rhythm)
-    mid.tracks.append(bass_track)
+    background_track = MidiTrack()
+    background_track.append(Message('program_change', program=82, time=0))  # Lead 2 (sawtooth)
+    write_track(background_track, background, rhythm, channel=1, velocity=60)
+    mid.tracks.append(background_track)
 
-    chords_track = MidiTrack()
-    write_chords(chords_track, chords, rhythm)
-    mid.tracks.append(chords_track)
+    bass_track = MidiTrack()
+    bass_track.append(Message('program_change', program=38, time=0))        # Synth Bass 1
+    write_track(bass_track, bass, rhythm, channel=2, velocity=70)
+    mid.tracks.append(bass_track)
 
     mid.save(output_path)
     print(f"Fertig! Die Datei '{output_path}' wurde erzeugt.")
