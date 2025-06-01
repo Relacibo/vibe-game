@@ -242,33 +242,45 @@ fn spawn_wall(
     ));
 }
 
-use bevy::scene::SceneSpawner;
-
-fn spawn_trees(mut commands: Commands, trees: Res<Trees>, mut scene_spawner: ResMut<SceneSpawner>) {
+fn spawn_trees(mut commands: Commands, trees: Res<Trees>) {
     let perlin = Perlin::new(42);
     let mut rng = rand::rng();
 
     let ground_size = 2000.0;
     let tree_count = 3000;
+    let min_distance = 6.0; // Mindestabstand zwischen Bäumen
     let mut spawned = 0;
     let mut tries = 0;
+    let mut tree_positions: Vec<(f32, f32)> = Vec::with_capacity(tree_count);
 
     while spawned < tree_count && tries < tree_count * 10 {
         tries += 1;
         let x = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
         let z = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
 
-        let noise_val = perlin.get([x as f64 / 300.0, z as f64 / 300.0]);
-        if noise_val > 0.15 {
-            let idx = rng.random_range(0..12);
+        // Für größere Wäldchen: Noise-Schwelle niedriger und Skalierung kleiner
+        let noise_val = perlin.get([x as f64 / 800.0, z as f64 / 800.0]);
+        let is_wood = noise_val > 0.18;
+        let is_lonely = rng.random_bool(0.01);
 
-            commands.spawn((
-                SceneRoot(trees.scene_handles[idx].clone()),
-                Transform::from_xyz(x, 0.0, z),
-                Visibility::Visible,
-            ));
+        if is_wood || is_lonely {
+            // Prüfe Mindestabstand zu allen bisherigen Bäumen
+            if tree_positions.iter().all(|&(px, pz)| {
+                let dx = px - x;
+                let dz = pz - z;
+                (dx * dx + dz * dz).sqrt() >= min_distance
+            }) {
+                let idx = rng.random_range(0..12);
 
-            spawned += 1;
+                commands.spawn((
+                    SceneRoot(trees.scene_handles[idx].clone()),
+                    Transform::from_xyz(x, 0.0, z),
+                    Visibility::Visible,
+                ));
+
+                tree_positions.push((x, z));
+                spawned += 1;
+            }
         }
     }
 }
