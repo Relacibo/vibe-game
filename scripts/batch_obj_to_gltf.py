@@ -2,9 +2,12 @@ import bpy
 import os
 import math
 
-base_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'models', 'trees'))
-input_folder = base_folder
-output_folder = base_folder
+script_dir = os.path.dirname(os.path.abspath(__file__))
+input_folder = os.path.join(script_dir, "..", "generated", "generate_trees")
+output_folder = os.path.join(script_dir, "..", "assets", "models", "trees")
+
+input_folder = os.path.abspath(input_folder)
+output_folder = os.path.abspath(output_folder)
 
 for i in range(12):
     bpy.ops.wm.read_factory_settings(use_empty=True)

@@ -12,10 +12,11 @@ use bevy::{
         renderer::RenderDevice,
     },
 };
+use bevy_common_assets::json::JsonAssetPlugin;
 use bevy_rapier3d::{na::RealField, prelude::*};
 use noise::{NoiseFn, Perlin};
 use rand::seq::SliceRandom;
-use std::f32::consts::PI;
+use std::{f32::consts::PI, mem::zeroed};
 
 pub mod assets;
 pub mod game;
@@ -34,7 +35,6 @@ use game::{enemy::Enemy, skybox_plugin::setup_skybox};
 use game::{gui::GuiPlugin, health::Health};
 use game::{pause_menu_gui::PauseMenuPlugin, player::Player};
 use rand::Rng;
-use rand::rng;
 use serde::Deserialize;
 
 #[derive(Component)]
@@ -47,46 +47,40 @@ pub enum AppState {
     Paused,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Resource, Deserialize, Debug, Clone, bevy::asset::Asset, bevy::reflect::TypePath)]
+struct TreeColliderInfo {
+    trunk: ColliderPart,
+    crown: ColliderPart,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 struct ColliderPart {
     center: [f32; 3],
     radius: f32,
     height: f32,
 }
 
-#[derive(Deserialize, Clone)]
-struct TreeColliderInfo {
-    trunk: ColliderPart,
-    crown: ColliderPart,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Tree {
     scene_handle: Handle<Scene>,
-    collider_info: TreeColliderInfo,
+    collider_info: Handle<TreeColliderInfo>,
 }
 
 #[derive(Resource)]
 struct Trees {
-    trees: Vec<Tree>,
+    trees: [Tree; 12],
 }
 
 impl Trees {
     fn new(asset_server: &Res<AssetServer>) -> Self {
-        let mut trees = Vec::with_capacity(12);
-        for i in 0..12 {
+        let trees: [Tree; 12] = std::array::from_fn(|i| {
             let scene_handle = asset_server.load(format!("models/trees/tree_{i}.glb#Scene0"));
-            let json_path = format!("assets/models/trees/tree_{i}_collider.json");
-            let collider_info: TreeColliderInfo = {
-                let json_str = std::fs::read_to_string(&json_path)
-                    .unwrap_or_else(|_| panic!("Fehlende Collider-JSON: {json_path}"));
-                serde_json::from_str(&json_str).expect("Fehler beim Parsen der Collider-JSON")
-            };
-            trees.push(Tree {
+            let collider_info = asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
+            Tree {
                 scene_handle,
                 collider_info,
-            });
-        }
+            }
+        });
         Self { trees }
     }
 }
@@ -111,6 +105,8 @@ fn main() {
     .add_plugins(EnemyPlugin)
     .add_plugins(CameraPlugin)
     .add_plugins(PlayerPlugin)
+    .add_plugins(PauseMenuPlugin)
+    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&["tree_collider.json"]))
     .add_systems(
         Startup,
         (setup.after(setup_skybox), spawn_trees.after(setup)),
@@ -134,8 +130,6 @@ fn main() {
 
     #[cfg(not(target_family = "wasm"))]
     app.insert_state(AppState::default());
-
-    app.add_plugins(PauseMenuPlugin);
 
     app.run();
 }
@@ -336,6 +330,7 @@ fn update_tree_colliders(
     player_query: Single<&Transform, With<Player>>,
     tree_query: Query<(Entity, &Transform, &TreeRoot, Option<&Children>)>,
     collider_query: Query<&TreeCollider>,
+    collider_infos: Res<Assets<TreeColliderInfo>>,
     trees: Res<Trees>,
 ) {
     let player_pos = player_query.translation;
@@ -352,8 +347,9 @@ fn update_tree_colliders(
         if dist < cull_distance && !has_collider {
             // Collider SPAWNEN
             let tree = &trees.trees[tree_root.idx];
-            let trunk = &tree.collider_info.trunk;
-            let crown = &tree.collider_info.crown;
+            let collider_info = collider_infos.get(&tree.collider_info).unwrap();
+
+            let TreeColliderInfo { trunk, crown } = collider_info;
 
             commands.entity(entity).with_children(|parent| {
                 parent.spawn((

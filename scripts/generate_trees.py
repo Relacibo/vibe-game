@@ -4,8 +4,14 @@ from PIL import Image, ImageDraw
 import os
 import json
 
-output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'models', 'trees'))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(script_dir, "..", "generated", "generate_trees")
+output_dir = os.path.abspath(output_dir)
 os.makedirs(output_dir, exist_ok=True)
+
+# Zielverzeichnis für Collider-JSONs im Asset-Ordner
+asset_collider_dir = os.path.join(script_dir, "..", "assets", "models", "trees")
+os.makedirs(asset_collider_dir, exist_ok=True)
 
 def create_branch(base, length, radius, angle, tilt):
     # Erzeuge einen Ast als Zylinder
@@ -305,7 +311,9 @@ for i in range(12):
             "height": crown_height,
         }
     }
-    with open(os.path.join(output_dir, f"tree_{i}_collider.json"), "w") as f:
+    # Beispiel für das Speichern der Collider-JSON:
+    collider_path = os.path.join(asset_collider_dir, f"tree_{i}.tree_collider.json")
+    with open(collider_path, "w") as f:
         json.dump(tree_info, f)
 
 print("Alle Bäume und Texturen generiert!")

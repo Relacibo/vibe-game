@@ -1,12 +1,41 @@
-# Scripts
+# 🛠️ Scripts für Vibe Game
 
-## Übersicht
-
-In diesem Ordner findest du Skripte zur automatischen Generierung und Konvertierung von Baum-Modellen und Texturen (inkl. Bumpmaps/Normalmaps) für das Spiel.
+Hier findest du alle Tools zur automatischen Generierung und Konvertierung der Baum-Assets, Texturen, Bumpmaps, Collider-Daten und Musik für das chaotischste Baumspiel der Welt! 🌳💥
 
 ---
 
-## 1. Bäume und Texturen generieren
+## 🎵 8-Bit Musik generieren
+
+**Script:** `music/generate_8bit_music.py`
+
+**Voraussetzungen:**  
+- Python 3  
+- Pakete: `mido`, `numpy`, `python-rtmidi`  
+  Installation:  
+  ```sh
+  pip install mido numpy python-rtmidi
+  ```
+
+**Verwendung:**  
+```sh
+python3 music/generate_8bit_music.py
+```
+- Erstellt ein zufälliges, mehrstimmiges 8-Bit-MIDI-Stück (`generated/generate_8bit_music/vibe_8bit_theme.mid`), das du in einen OGG/WAV umwandeln und direkt im Spiel verwenden kannst.
+
+**Umwandlung in OGG/WAV mit MuseScore:**  
+1. Öffne die Datei `generated/generate_8bit_music/vibe_8bit_theme.mid` in [MuseScore](https://musescore.org/de).
+2. Wähle im Menü **Datei → Exportieren**.
+3. Wähle als Format z.B. **OGG Vorbis** oder **WAV**.
+4. Klicke auf **Exportieren** und speichere die Datei.
+5. Die exportierte Audiodatei kannst du direkt im Spiel verwenden!
+
+_Tipp: In MuseScore kannst du auch die Instrumente auf typische 8-Bit-Sounds (z.B. Square, Pulse, Synth) umstellen, um den Vibe zu verstärken.  
+Dazu: Rechtsklick auf die Spur → **Eigenschaften Notenzeile/Instrument...** → Im sich öffnenden Fenster kannst du unter „Instrument“ ein anderes auswählen, z.B. „Synth Lead“ oder „Square Lead“.  
+Für noch mehr Retro-Feeling kannst du auch eigene Soundfonts mit Chiptune-Instrumenten laden!_
+
+---
+
+## 🌲 Bäume & Texturen generieren
 
 **Script:** `generate_trees.py`
 
@@ -22,19 +51,15 @@ In diesem Ordner findest du Skripte zur automatischen Generierung und Konvertier
 ```sh
 python3 generate_trees.py
 ```
-- Erstellt 12 verschiedene Bäume mit Varianz (Stammdicke, Kronengröße, Äste, mehrere Kronen).
-- Speichert für jeden Baum:
-  - Stamm (`tree_X_trunk.obj`)
-  - Kronen (`tree_X_crown0.obj`, ...)
-  - Äste (`tree_X_branch0.obj`, ...)
-  - Texturen für Stamm/Äste (`tree_X_trunk.png`, `tree_X_branch.png`) und Kronen (`tree_X_crown.png`)
-  - **Bumpmap/Normalmap für Stamm/Äste** (`tree_X_trunk_bump.png`)
-  - **Bumpmap/Normalmap für Kronen** (`tree_X_crown_bump.png`, simuliert Löcher und Struktur im Blätterdach)
-- Alle Dateien werden im Verzeichnis `../assets/models/trees/` abgelegt.
+- Legt alle generierten Dateien im Ordner `generated/generate_trees/` ab:
+  - Modelle (`tree_X_trunk.obj`, `tree_X_crown0.obj`, ...)
+  - Texturen (`tree_X_trunk.png`, `tree_X_crown.png`, ...)
+  - Bumpmaps (`tree_X_trunk_bump.png`, `tree_X_crown_bump.png`)
+  - Collider-Infos als JSON (`tree_X_collider.json`)
 
 ---
 
-## 2. OBJ-Bäume zu GLB konvertieren
+## 🔄 OBJ-Bäume zu GLB konvertieren
 
 **Script:** `batch_obj_to_gltf.py`
 
@@ -42,27 +67,25 @@ python3 generate_trees.py
 - [Blender](https://www.blender.org/download/) (empfohlen: offizielle Version, nicht Flatpak/Snap)
 
 **Verwendung:**  
-
-**Variante 1: Blender im Hintergrund (empfohlen für Automatisierung)**
 ```sh
 blender --background --python batch_obj_to_gltf.py
 ```
-
-**Variante 2: Blender-GUI**
-1. Starte Blender.
-2. Öffne das Scripting-Tab.
-3. Lade `batch_obj_to_gltf.py` in den Texteditor.
-4. Klicke auf „Run Script“ oder drücke `Alt+P`.
-
-- Beide Varianten importieren alle Baumteile (Stamm, Kronen, Äste), drehen sie korrekt, wenden „Shade Smooth“ an, weisen die passenden Texturen und Bumpmaps zu (inkl. Kronen-Bumpmap) und exportieren für jeden Baum eine GLB-Datei (`tree_X.glb`) mit eingebetteten Texturen und Normalmaps.
+- Liest alle Modelle und Texturen aus `generated/generate_trees/` und exportiert die GLB-Dateien nach `assets/models/trees/`.
 
 ---
 
-## Hinweise
+## 💡 Hinweise & Tipps
 
-- Die generierten GLB-Dateien können direkt in Bevy als Scene geladen werden. Bevy unterstützt Normalmaps aus GLTF/GLB automatisch.
-- Für Varianz und Korrektheit der Modelle/Texturen ggf. die Parameter in `generate_trees.py` anpassen.
-- Bei Problemen mit Blender-Addons immer die offizielle Blender-Version verwenden.
-- Die Skripte sind für Blender 4.4+ angepasst (kein `use_auto_smooth` mehr, stattdessen nur Shade Smooth und konsistente Normalen).
+- Die Collider-JSON-Dateien sorgen dafür, dass die Bäume in Bevy exakt und performant kollidieren – sogar mit separatem Collider für Stamm und Krone!
+- Die Musik ist garantiert copyright-frei.
+- Für maximale Performance werden Collider im Spiel nur in der Nähe des Spielers gespawnt (Collider-Culling).
+- Du kannst die Skripte beliebig anpassen und erweitern – lass deiner Kreativität freien Lauf!
 
 ---
+
+## 🤖 Generierungshinweis
+
+> **Hinweis:**  
+> Der Großteil dieses Readmes sowie der Skripte und ein erheblicher Teil des Codes wurden mit Unterstützung von GitHub Copilot (GPT-4.1) unter Anleitung von Relacibo generiert.  
+>  
+> _Mit ❤️ von GitHub Copilot/GPT-4.1 unter Anweisung von Relacibo._
