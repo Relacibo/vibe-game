@@ -25,6 +25,7 @@ use bevy::ecs::system::ParamSet;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use bevy_rapier3d::prelude::*;
 use game::{
+    background_music_plugin::BackgroundMusicPlugin,
     bullet::{Bullet, BulletLifetime, BulletPlugin, bullet_collision_system},
     camera::CameraPlugin,
     enemy::EnemyPlugin,
@@ -75,7 +76,8 @@ impl Trees {
     fn new(asset_server: &Res<AssetServer>) -> Self {
         let trees: [Tree; 12] = std::array::from_fn(|i| {
             let scene_handle = asset_server.load(format!("models/trees/tree_{i}.glb#Scene0"));
-            let collider_info = asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
+            let collider_info =
+                asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
             Tree {
                 scene_handle,
                 collider_info,
@@ -99,6 +101,7 @@ fn main() {
         ..default()
     }))
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    .add_plugins(BackgroundMusicPlugin)
     .add_plugins(SkyboxPlugin)
     .add_plugins(GuiPlugin)
     .add_plugins(BulletPlugin)
@@ -106,7 +109,9 @@ fn main() {
     .add_plugins(CameraPlugin)
     .add_plugins(PlayerPlugin)
     .add_plugins(PauseMenuPlugin)
-    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&["tree_collider.json"]))
+    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&[
+        "tree_collider.json",
+    ]))
     .add_systems(
         Startup,
         (setup.after(setup_skybox), spawn_trees.after(setup)),
@@ -347,7 +352,10 @@ fn update_tree_colliders(
         if dist < cull_distance && !has_collider {
             // Collider SPAWNEN
             let tree = &trees.trees[tree_root.idx];
-            let collider_info = collider_infos.get(&tree.collider_info).unwrap();
+            let Some(collider_info) = collider_infos.get(&tree.collider_info) else {
+                warn!("Collider für Entity {:?} nicht gefunden!", entity);
+                return;
+            };
 
             let TreeColliderInfo { trunk, crown } = collider_info;
 

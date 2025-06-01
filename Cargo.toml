@@ -12,6 +12,9 @@ rand = "0.9.1"
 bincode = { version = "2", features = ["derive"] }
 bevy_rapier3d = "0.30"
 noise = "0.9.0"
+bevy_procedural_audio = "0.5.0"
+uuid = "1.17.0"
+fundsp = "0.20.0"
 
 [target.'cfg(target_arch = "wasm32")']
 runner = "wasm-server-runner"

@@ -1,9 +1,10 @@
-pub mod player;
-pub mod enemy;
-pub mod health;
-pub mod network;
-pub mod skybox_plugin;
-pub mod gui;
-pub mod pause_menu_gui;
+pub mod background_music_plugin;
 pub mod bullet;
 pub mod camera;
+pub mod enemy;
+pub mod gui;
+pub mod health;
+pub mod network;
+pub mod pause_menu_gui;
+pub mod player;
+pub mod skybox_plugin;

@@ -8,88 +8,84 @@ output_dir = os.path.join(script_dir, "..", "generated", "generate_8bit_music")
 os.makedirs(output_dir, exist_ok=True)
 output_path = os.path.join(output_dir, "vibe_8bit_theme.mid")
 
-C_MAJOR = [60, 62, 64, 65, 67, 69, 71, 72]  # C D E F G A B C
+C_MAJOR = [60, 62, 64, 65, 67, 69, 71, 72]
 CHORDS = {
-    "I":  [60, 64, 67],      # C E G
-    "IV": [65, 69, 72],      # F A C
-    "V":  [67, 71, 74],      # G B D
-    "vi": [69, 72, 76],      # A C E
-    "V7": [67, 71, 74, 77],  # G B D F
+    "I":  [60, 64, 67],
+    "ii": [62, 65, 69],
+    "iii": [64, 67, 71],
+    "IV": [65, 69, 72],
+    "V":  [67, 71, 74],
+    "V7": [67, 71, 74, 77],
+    "vi": [69, 72, 76],
+    "bVII": [70, 74, 77],
 }
 
-PROGRESSION = ["I", "IV", "V", "I", "vi", "IV", "V", "I"] * 4
+PROGRESSION = [
+    "I", "vi", "ii", "V7",
+    "iii", "vi", "IV", "bVII",
+    "I", "V7", "vi", "IV",
+    "ii", "V", "I", "V7"
+] * 2
 
 RHYTHM_PATTERNS = [
-    [480, 480, 480, 480],
     [240, 240, 480, 480],
     [360, 120, 360, 120, 480],
     [320, 160, 320, 160, 320],
     [480, 240, 240, 480],
-    [720, 240, 480],
+    [360, 120, 240, 360],
     [240, 240, 240, 240, 480],
+    [120, 120, 120, 120, 240, 240],
 ]
 
-def make_melody_motif(scale, start_note, length=4):
-    motif = [start_note]
-    for _ in range(length - 1):
-        last = motif[-1]
-        options = [n for n in scale if abs(n - last) in [2, 4] and n != last]
-        if not options:
-            options = scale
-        motif.append(random.choice(options))
-    return motif
+# Erlaubte Intervalle (in Halbtonschritten) zu Akkordtönen
+ALLOWED_INTERVALS = [0, 2, 4, 5, 7, 9, 10, 11]  # Prime, große Sekunde, große/kleine Terz, Quarte, Quinte, große/kleine Sexte, große/kleine Septime
 
-def make_melody_for_chord(chord, scale, prev_note, length, rhythm):
-    melody = []
-    last_note = prev_note
-    for i in range(length):
-        if i == 0 and last_note is not None:
-            options = [n for n in chord if abs(n - last_note) <= 4]
-            note = random.choice(options) if options else random.choice(chord)
-        elif random.random() < 0.8:
-            step_options = [n for n in chord if abs(n - last_note) in [2, 4]]
-            note = random.choice(step_options) if step_options else random.choice(chord)
-        else:
-            idx = scale.index(last_note) if last_note in scale else 0
-            if idx > 0 and idx < len(scale) - 1:
-                note = scale[idx + random.choice([-1, 1])]
-            else:
-                note = last_note
-        melody.append(note)
-        last_note = note
-    return melody, last_note
+def allowed_note(chord, note):
+    # Erlaubt, wenn zu irgendeinem Akkordton ein erlaubtes Intervall besteht
+    for c in chord:
+        interval = abs((note - c) % 12)
+        if interval in ALLOWED_INTERVALS:
+            # Vermeide Terz+Quarte gleichzeitig (z.B. E+F zu C-Dur)
+            if not (interval == 3 or interval == 4) or not (abs((note - c - 5) % 12) == 5):
+                return True
+    return False
 
-def make_background_for_chord(chord, length, rhythm):
-    # Dezente Akkordstimme: meist Haltenoten oder punktierte Noten, selten Synkopen
-    bg = []
-    for i in range(length):
-        if i == 0:
-            # Akkordton (Terz oder Quinte, nicht Grundton)
-            note = random.choice(chord[1:])
-            bg.append(note)
-        elif random.random() < 0.2:
-            # Pause für Luft
-            bg.append(None)
-        else:
-            # Haltenote oder Wiederholung
-            bg.append(bg[-1] if bg else random.choice(chord[1:]))
-    return bg
+def pick_note(chord, scale, prev_note):
+    # Suche einen erlaubten Ton in der Nähe
+    candidates = [n for n in scale if allowed_note(chord, n) and abs(n - prev_note) <= 7]
+    if not candidates:
+        candidates = [n for n in scale if allowed_note(chord, n)]
+    return random.choice(candidates) if candidates else prev_note
 
-def make_bass_for_chord(chord, length, rhythm):
-    # Bass: Grundton, Quinte, Grundton, Oktave
+def make_bass_for_chord(chord, rhythm):
+    # Repetitiver Bass: Grundton und Quinte, manchmal Oktave
     root = chord[0] - 12
     fifth = chord[2] - 12
-    notes = []
-    for i in range(length):
-        if i % 4 == 0:
-            notes.append(root)
-        elif i % 4 == 2:
-            notes.append(fifth)
-        elif random.random() < 0.2:
-            notes.append(root + 12)
+    pattern = [root, fifth]
+    bass = []
+    for i, dur in enumerate(rhythm):
+        if random.random() < 0.15:
+            bass.append(root + 12)  # gelegentlich Oktave
         else:
-            notes.append(root)
-    return notes
+            bass.append(pattern[i % 2])
+    return bass
+
+def make_voice_for_chord(chord, scale, prev_note, rhythm, is_melody=False, other_voice_rhythm=None):
+    # Rhythmisches Wechselspiel: Wenn andere Stimme spielt, öfter Pause machen
+    voice = []
+    last_note = prev_note
+    for i, dur in enumerate(rhythm):
+        if other_voice_rhythm and i < len(other_voice_rhythm) and other_voice_rhythm[i] is not None:
+            if random.random() < 0.5:
+                voice.append(None)
+                continue
+        if random.random() < (0.15 if is_melody else 0.25):
+            voice.append(None)
+            continue
+        note = pick_note(chord, scale, last_note)
+        voice.append(note)
+        last_note = note
+    return voice, last_note
 
 def write_track(track, notes, rhythm, channel=0, velocity=100):
     for note, dur in zip(notes, rhythm):
@@ -107,56 +103,46 @@ def main():
     melody = []
     background = []
     bass = []
-    rhythm = []
-    last_note = 60  # C4
+    last_mel = 60
+    last_bg = 64
 
-    # Melodie-orientierter Anfang (nur Melodie, 4 Takte, motivisch)
-    motif = make_melody_motif(C_MAJOR, last_note, length=4)
-    for _ in range(2):
-        pattern = random.choice(RHYTHM_PATTERNS)
-        melody += motif[:len(pattern)]
-        background += [None] * len(pattern)
-        bass += [None] * len(pattern)
-        rhythm += pattern
-        last_note = melody[-1]
-
-    motif2 = [n + random.choice([-2, 0, 2]) for n in motif]
-    for _ in range(2):
-        pattern = random.choice(RHYTHM_PATTERNS)
-        melody += motif2[:len(pattern)]
-        background += [None] * len(pattern)
-        bass += [None] * len(pattern)
-        rhythm += pattern
-        last_note = melody[-1]
-
-    # Jetzt Akkorde und Bass dazu, Melodie bleibt im Vordergrund
-    for chord_name in PROGRESSION:
+    for bar, chord_name in enumerate(PROGRESSION):
         chord = CHORDS[chord_name]
         scale = C_MAJOR
-        pattern = random.choice(RHYTHM_PATTERNS)
-        bar_len = len(pattern)
-        bar_melody, last_note = make_melody_for_chord(chord, scale, last_note, bar_len, pattern)
-        bar_background = make_background_for_chord(chord, bar_len, pattern)
-        bar_bass = make_bass_for_chord(chord, bar_len, pattern)
+        mel_rhythm = random.choice(RHYTHM_PATTERNS)
+        bg_rhythm = random.choice(RHYTHM_PATTERNS)
+        bass_rhythm = [240] * max(len(mel_rhythm), len(bg_rhythm))  # gleichmäßiger Bass
+
+        # Rhythmisches Wechselspiel: Melodie und Begleitung achten aufeinander
+        bar_melody, last_mel = make_voice_for_chord(chord, scale, last_mel, mel_rhythm, is_melody=True, other_voice_rhythm=bg_rhythm)
+        bar_background, last_bg = make_voice_for_chord(chord, scale, last_bg, bg_rhythm, is_melody=False, other_voice_rhythm=mel_rhythm)
+        bar_bass = make_bass_for_chord(chord, bass_rhythm)
+
+        # Stimmen auf gleiche Länge bringen
+        max_len = max(len(bar_melody), len(bar_background), len(bar_bass))
+        bar_melody += [None] * (max_len - len(bar_melody))
+        bar_background += [None] * (max_len - len(bar_background))
+        bar_bass += [None] * (max_len - len(bar_bass))
+        rhythm = [240] * max_len
+
         melody += bar_melody
         background += bar_background
         bass += bar_bass
-        rhythm += pattern
 
     # Tracks schreiben
     melody_track = MidiTrack()
-    melody_track.append(Message('program_change', program=81, time=0))      # Lead 1 (square)
-    write_track(melody_track, melody, rhythm, channel=0, velocity=110)
+    melody_track.append(Message('program_change', program=81, time=0))
+    write_track(melody_track, melody, [240]*len(melody), channel=0, velocity=110)
     mid.tracks.append(melody_track)
 
     background_track = MidiTrack()
-    background_track.append(Message('program_change', program=82, time=0))  # Lead 2 (sawtooth)
-    write_track(background_track, background, rhythm, channel=1, velocity=60)
+    background_track.append(Message('program_change', program=87, time=0))
+    write_track(background_track, background, [240]*len(background), channel=1, velocity=60)
     mid.tracks.append(background_track)
 
     bass_track = MidiTrack()
-    bass_track.append(Message('program_change', program=38, time=0))        # Synth Bass 1
-    write_track(bass_track, bass, rhythm, channel=2, velocity=70)
+    bass_track.append(Message('program_change', program=38, time=0))
+    write_track(bass_track, bass, [240]*len(bass), channel=2, velocity=70)
     mid.tracks.append(bass_track)
 
     mid.save(output_path)
