@@ -1,8 +1,8 @@
 use bevy::{audio, prelude::*};
 use bevy_rapier3d::{na::RealField, prelude::*};
-use rand::{Rng, seq::IndexedRandom};
+use rand::Rng;
 
-use crate::{AppState, Ground};
+use crate::{AppState, Ground, game::tree::StakeSound};
 
 use super::{
     bullet::Bullet,
@@ -12,13 +12,13 @@ use super::{
     tree::{RootParticleAssets, TreeCollider, TreeRoot, maybe_uproot_tree},
 };
 
-fn pending_explosion_animation_system(
+fn pending_explosion_system(
     mut commands: Commands,
     time: Res<Time>,
-    mut query: Query<(&mut PendingExplosion)>,
+    mut query: Query<&mut PendingExplosion>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (mut anim) in query.iter_mut() {
+    for mut anim in query.iter_mut() {
         anim.timer.tick(time.delta());
         let t = (anim.timer.elapsed_secs() / anim.timer.duration().as_secs_f32()).clamp(0.0, 1.0);
 
@@ -157,13 +157,24 @@ fn explosion_particle_system(
         }
     }
 }
+#[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 fn ground_explosion_system(
     mut commands: Commands,
     mut collision_events: EventReader<CollisionEvent>,
-    pending_explosions: Query<(&Transform, Entity), With<PendingExplosion>>,
-    children_query: Query<&ChildOf, Without<PendingExplosion>>,
-    mut all_enemies: Query<(Entity, &Transform, Option<&mut ExternalImpulse>), With<Enemy>>,
+    pending_explosions: Query<
+        (&Transform, Entity),
+        (With<PendingExplosion>, Without<PendingExplosionSuppressed>),
+    >,
+    children_query: Query<&ChildOf>,
+    mut all_enemies: Query<
+        (Entity, &Transform, &mut ExternalImpulse),
+        (
+            With<Enemy>,
+            Without<DelayedDeath>,
+            Without<PendingExplosion>,
+        ),
+    >,
     mut player_health: Single<&mut Health, With<Player>>,
     ground_entity: Single<Entity, With<Ground>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -204,11 +215,20 @@ fn ground_explosion_system(
     }
 }
 
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn explode_pending_entity(
     commands: &mut Commands,
     entity: Entity,
     explosion_pos: Vec3,
-    all_enemies: &mut Query<(Entity, &Transform, Option<&mut ExternalImpulse>), With<Enemy>>,
+    all_enemies: &mut Query<
+        (Entity, &Transform, &mut ExternalImpulse),
+        (
+            With<Enemy>,
+            Without<DelayedDeath>,
+            Without<PendingExplosion>,
+        ),
+    >,
     player_health: &mut Single<&mut Health, With<Player>>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -217,7 +237,7 @@ fn explode_pending_entity(
     // Partikel-Explosion erzeugen (wie gehabt)
     let num_particles = 10;
     let mut rng = rand::rng();
-    for _ in 0..num_particles {
+    for i in 0..num_particles {
         let dir = Vec3::new(
             rng.random_range(-1.0..1.0),
             rng.random_range(0.0..1.0),
@@ -237,7 +257,7 @@ fn explode_pending_entity(
         let end_color = Color::srgba(end_r, end_g, end_b, 0.0);
 
         let mat_handle = materials.add(start_color);
-        commands.spawn((
+        let mut e = commands.spawn((
             ExplosionParticle {
                 velocity: dir * speed,
                 timer: Timer::from_seconds(rng.random_range(0.3..0.7), TimerMode::Once),
@@ -250,11 +270,18 @@ fn explode_pending_entity(
             Transform::from_translation(explosion_pos),
             Visibility::Visible,
         ));
+        if i == 0 {
+            // Sound abspielen, append it to the first particle
+            e.insert((
+                AudioPlayer::new(explosion_sound.0.clone()),
+                PlaybackSettings::ONCE.with_spatial(true),
+            ));
+        }
     }
 
     // Schaden und Impuls für Gegner im Umkreis
     let mut killed = 0;
-    for (other_entity, other_transform, impulse_opt) in all_enemies.iter_mut() {
+    for (other_entity, other_transform, mut impulse) in all_enemies.iter_mut() {
         let dist = (other_transform.translation - explosion_pos).length();
         if dist <= 3.0 {
             commands.entity(other_entity).insert(DelayedDeath {
@@ -263,42 +290,34 @@ fn explode_pending_entity(
             killed += 1;
         }
         if dist <= 10.0 {
-            if let Some(mut impulse) = impulse_opt {
-                let dir = (other_transform.translation - explosion_pos)
-                    .with_y(0.0)
-                    .normalize_or_zero();
-                let strength = 20.0 * (1.0 - (dist / 10.0)).clamp(0.0, 1.0);
-                impulse.impulse += dir * strength + Vec3::Y * (strength * 0.8);
-            }
+            let dir = (other_transform.translation - explosion_pos)
+                .with_y(0.0)
+                .normalize_or_zero();
+            let strength = 20.0 * (1.0 - (dist / 10.0)).clamp(0.0, 1.0);
+            impulse.impulse += dir * strength + Vec3::Y * (strength * 0.8);
         }
     }
     player_health.value += killed as f32 * 2.0;
-    println!(
-        "{} Gegner explodiert! Spieler bekommt {} Leben zurück.",
-        killed,
-        killed * 2
-    );
+    if killed > 0 {
+        println!(
+            "{} Gegner explodiert! Spieler bekommt {} Leben zurück.",
+            killed,
+            killed * 2
+        );
+    }
 
     // Entity entfernen
     commands.entity(entity).despawn();
-
-    // Sound abspielen
-    commands.spawn((
-        AudioPlayer::new(explosion_sound.0.clone()),
-        PlaybackSettings::ONCE
-            .with_spatial(true)
-            .with_volume(audio::Volume::Decibels(50.0)),
-        Transform::from_translation(explosion_pos),
-    ));
 }
 
 pub fn bullet_collision_system(
     mut commands: Commands,
     mut collision_events: EventReader<CollisionEvent>,
-    mut player_query: Query<(Entity, &mut Health), With<Player>>,
+    player: Single<(Entity, &mut Health), With<Player>>,
     mut enemy_query: Query<(Entity, &mut ExternalImpulse), With<Enemy>>,
     bullet_query: Query<(Entity, &Velocity), With<Bullet>>,
 ) {
+    let (player_entity, mut health) = player.into_inner();
     for event in collision_events.read() {
         if let CollisionEvent::Started(e1, e2, _) = event {
             // Finde die Bullet und ihre Velocity
@@ -311,7 +330,7 @@ pub fn bullet_collision_system(
             };
 
             // Prüfe, ob der andere ein Spieler ist
-            if let Ok((player_entity, mut health)) = player_query.get_mut(*other) {
+            if player_entity == *other {
                 health.value -= 1.0;
                 println!("Spieler getroffen! Leben: {}", health.value);
                 continue;
@@ -323,10 +342,11 @@ pub fn bullet_collision_system(
                 let impulse_vec = dir * 60.0 + Vec3::Y * 6.0;
                 impulse.impulse += impulse_vec;
 
-                // Explosion vormerken
-                commands
-                    .entity(enemy_entity)
-                    .insert(PendingExplosion::default());
+                // Explosion vormerken mit Suppression
+                commands.entity(enemy_entity).insert((
+                    PendingExplosion::default(),
+                    PendingExplosionSuppressed::default(),
+                ));
 
                 commands.entity(bullet_entity).despawn();
                 continue;
@@ -350,10 +370,11 @@ impl Plugin for ExplosionPlugin {
                 tree_explosion_system,
                 explosion_particle_system,
                 player_tree_collision_system,
-                pending_explosion_animation_system,
+                pending_explosion_system,
                 ground_explosion_system,
                 delayed_death_system,
                 bullet_collision_system,
+                pending_explosion_suppression_system,
             )
                 .run_if(in_state(AppState::Running)),
         );
@@ -378,21 +399,34 @@ struct DelayedDeath {
     timer: Timer,
 }
 
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn tree_explosion_system(
     mut commands: Commands,
     mut collision_events: EventReader<CollisionEvent>,
-    pending_explosions: Query<Entity, With<PendingExplosion>>,
-    tree_query: Query<(Entity, &Children, &Transform), (With<TreeRoot>, Without<PendingExplosion>)>,
+    pending_explosions: Query<
+        Entity,
+        (With<PendingExplosion>, Without<PendingExplosionSuppressed>),
+    >,
+    tree_query: Query<(Entity, &Children, &Transform, &TreeRoot), Without<PendingExplosion>>,
     tree_colliders_query: Query<
         (Entity, &ChildOf),
         (With<TreeCollider>, Without<PendingExplosion>),
     >,
-    mut all_enemies: Query<(Entity, &Transform, Option<&mut ExternalImpulse>), With<Enemy>>,
+    mut all_enemies: Query<
+        (Entity, &Transform, &mut ExternalImpulse),
+        (
+            With<Enemy>,
+            Without<DelayedDeath>,
+            Without<PendingExplosion>,
+        ),
+    >,
     mut player_health: Single<&mut Health, With<Player>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     explosion_sound: Res<ExplosionSound>,
     root_assets: Res<RootParticleAssets>,
+    stake_sound: Res<StakeSound>,
 ) {
     for event in collision_events.read() {
         if let CollisionEvent::Started(e1, e2, _) = event {
@@ -415,8 +449,10 @@ fn tree_explosion_system(
                 &mut commands,
                 tree_child_entity,
                 &tree_query,
-                &tree_colliders_query,
                 &root_assets,
+                &mut meshes,
+                &mut materials,
+                &stake_sound,
             );
 
             // --- pending_entity explodieren lassen wie im explosion_system ---
@@ -436,16 +472,21 @@ fn tree_explosion_system(
     }
 }
 
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn player_tree_collision_system(
     mut commands: Commands,
     mut collision_events: EventReader<CollisionEvent>,
     player: Single<(Entity, &Velocity, &Player)>,
-    tree_query: Query<(Entity, &Children, &Transform), (With<TreeRoot>, Without<PendingExplosion>)>,
+    tree_query: Query<(Entity, &Children, &Transform, &TreeRoot), Without<PendingExplosion>>,
     tree_colliders_query: Query<
         (Entity, &ChildOf),
         (With<TreeCollider>, Without<PendingExplosion>),
     >,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     root_assets: Res<RootParticleAssets>,
+    stake_sound: Res<StakeSound>,
 ) {
     let (player_entity, player_velocity, Player { speed, .. }) = player.into_inner();
 
@@ -476,11 +517,39 @@ fn player_tree_collision_system(
                 &mut commands,
                 tree_entity,
                 &tree_query,
-                &tree_colliders_query,
                 &root_assets,
+                &mut meshes,
+                &mut materials,
+                &stake_sound,
             );
+        }
+    }
+}
 
-            // Optional: Sound, Partikel, etc. wie bei tree_explosion_system
+#[derive(Component)]
+pub struct PendingExplosionSuppressed {
+    pub timer: Timer,
+}
+
+impl Default for PendingExplosionSuppressed {
+    fn default() -> Self {
+        PendingExplosionSuppressed {
+            timer: Timer::from_seconds(0.15, TimerMode::Once),
+        }
+    }
+}
+
+fn pending_explosion_suppression_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut PendingExplosionSuppressed)>,
+) {
+    for (entity, mut suppressed) in query.iter_mut() {
+        suppressed.timer.tick(time.delta());
+        if suppressed.timer.finished() {
+            commands
+                .entity(entity)
+                .remove::<PendingExplosionSuppressed>();
         }
     }
 }

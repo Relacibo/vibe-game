@@ -48,31 +48,40 @@ def create_root_obj(filename, segments=14, length=2.2, radius=0.09, style="norma
             next_next = next_s + sides
             faces.append((curr + 1, next + 1, next_next + 1, next_s + 1))
     with open(filename, "w") as f:
+        # Funktion zum Rotieren um die X-Achse
+        def rotate_x(v, angle_deg):
+            angle = np.radians(angle_deg)
+            x, y, z = v
+            y2 = y * np.cos(angle) - z * np.sin(angle)
+            z2 = y * np.sin(angle) + z * np.cos(angle)
+            return (x, y2, z2)
+
         for v in verts:
-            f.write(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f}\n")
+            v_rot = rotate_x(v, -90)
+            f.write(f"v {v_rot[0]:.4f} {v_rot[1]:.4f} {v_rot[2]:.4f}\n")
         for face in faces:
             f.write(f"f {' '.join(str(idx) for idx in face)}\n")
 
-# Hauptwurzeln
-styles = ["normal", "spiral", "bent", "split"]
+# Hauptwurzeln (sehr günstig)
 for i in range(5):
-    style = np.random.choice(styles)
     create_root_obj(
         os.path.join(TARGET_DIR, f"root_{i}.obj"),
-        segments=np.random.randint(10, 18),
+        segments=2,      # nur 2 Segmente
         length=np.random.uniform(1.5, 2.5),
         radius=np.random.uniform(0.07, 0.12),
-        style=style
+        style=np.random.choice(["normal", "spiral", "bent", "split"]),
+        sides=5          # nur 5 Seiten
     )
 
-# Splitter (kleine, kurze Stücke)
+# Splitter (noch günstiger)
 for i in range(4):
     create_root_obj(
         os.path.join(TARGET_DIR, f"root_splitter_{i}.obj"),
-        segments=np.random.randint(4, 7),
+        segments=1,      # nur 1 Segment
         length=np.random.uniform(0.3, 0.7),
         radius=np.random.uniform(0.03, 0.06),
-        style="normal"
+        style="normal",
+        sides=6          # nur 6 Seiten
     )
 
 print(f"Mehrere Wurzel-Meshes generiert in {TARGET_DIR}")

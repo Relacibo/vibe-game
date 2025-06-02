@@ -12,8 +12,16 @@ for filename in os.listdir(input_dir):
         obj_path = os.path.join(input_dir, filename)
         glb_path = os.path.join(output_dir, filename.replace(".obj", ".glb"))
         bpy.ops.wm.obj_import(filepath=obj_path)
+        # Braunes Material erstellen
+        mat = bpy.data.materials.new(name="RootBrown")
+        mat.diffuse_color = (0.35, 0.18, 0.08, 1.0)  # RGBA, Braun
         for obj in bpy.context.selected_objects:
             if obj.type == 'MESH':
+                # Material zuweisen
+                if obj.data.materials:
+                    obj.data.materials[0] = mat
+                else:
+                    obj.data.materials.append(mat)
                 bpy.context.view_layer.objects.active = obj
                 bpy.ops.object.shade_smooth()
         bpy.ops.export_scene.gltf(filepath=glb_path, export_format='GLB', export_yup=False)

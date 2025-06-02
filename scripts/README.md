@@ -104,53 +104,28 @@ _Tipp: Passe die Parameter im Skript an, um mehr oder weniger Moos, größere Fl
 
 ---
 
-## 🌱 Wurzel-Meshes & Texturen generieren
+## 🌱 Wurzeln generieren & konvertieren
 
-**Script:** `generate_tree_root_particles.py`
+Mit nur einem Befehl kannst du alle Wurzel-Objekte generieren **und** als GLB exportieren:
 
-**Voraussetzungen:**  
-- Python 3  
-- Pakete: `numpy`, `Pillow`  
-  Installation:  
-  ```sh
-  pip install numpy pillow
-  ```
-
-**Verwendung:**  
 ```sh
-python3 generate_tree_root_particles.py
+just roots
 ```
-- Erzeugt mehrere prozedurale Wurzel-Meshes (`root_*.obj`, `root_splitter_*.obj`) und eine passende Textur (`root_diffuse.png`) im Ordner `generated/generate_roots/`.
+
+- Führt automatisch das Generierungsskript und das Blender-Konvertierungsskript aus.
+- Die Wurzeln erhalten beim Export ein braunes Material.
 
 ---
 
-## 🪄 Wurzel-OBJ zu GLB konvertieren
+## 🌳 Bäume generieren & konvertieren
 
-**Script:** `root_obj_to_gltf.py`
+Mit nur einem Befehl kannst du alle Baum-Objekte generieren **und** als GLB exportieren:
 
-**Voraussetzungen:**  
-- [Blender](https://www.blender.org/download/) (empfohlen: offizielle Version, nicht Flatpak/Snap)
-
-**Verwendung:**  
 ```sh
-blender --background --python scripts/root_obj_to_gltf.py
+just trees
 ```
-- Konvertiert alle `.obj`-Dateien aus `generated/generate_roots/` automatisch zu `.glb`-Dateien und legt sie in `assets/models/roots/` ab.
 
----
-
-## 🌳 Baum-OBJ zu GLB konvertieren
-
-**Script:** `batch_trees_obj_to_gltf.py`
-
-**Voraussetzungen:**  
-- [Blender](https://www.blender.org/download/) (empfohlen: offizielle Version, nicht Flatpak/Snap)
-
-**Verwendung:**  
-```sh
-blender --background --python scripts/batch_trees_obj_to_gltf.py
-```
-- Konvertiert alle `.obj`-Dateien aus `generated/generate_trees/` automatisch zu `.glb`-Dateien und legt sie in `assets/models/trees/` ab.
+- Führt automatisch das Generierungsskript und das Blender-Konvertierungsskript für Bäume aus.
 
 ---
 

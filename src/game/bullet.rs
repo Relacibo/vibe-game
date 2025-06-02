@@ -37,24 +37,21 @@ fn bounce_sound_system(
     for event in collision_events.read() {
         if let CollisionEvent::Started(e1, e2, _) = event {
             // Prüfe, ob einer der beiden ein Bullet ist und wie weit entfernt
-            if let Ok((bullet_transform, _)) = bullet_query.get(*e1) {
-                if (bullet_transform.translation - player_transform.translation).length()
-                    < max_distance_from_player
-                {
-                    commands.spawn((
-                        AudioPlayer::new(bounce_sound.0.clone()),
-                        PlaybackSettings::ONCE.with_spatial(true),
-                    ));
-                }
-            } else if let Ok((bullet_transform, _)) = bullet_query.get(*e2) {
-                if (bullet_transform.translation - player_transform.translation).length()
-                    < max_distance_from_player
-                {
-                    commands.spawn((
-                        AudioPlayer::new(bounce_sound.0.clone()),
-                        PlaybackSettings::ONCE.with_spatial(true),
-                    ));
-                }
+            let Some((bullet_transform, bullet_entity)) = bullet_query
+                .get(*e1)
+                .ok()
+                .or_else(|| bullet_query.get(*e2).ok())
+            else {
+                continue;
+            };
+
+            if (bullet_transform.translation - player_transform.translation).length()
+                < max_distance_from_player
+            {
+                commands.entity(bullet_entity).insert((
+                    AudioPlayer::new(bounce_sound.0.clone()),
+                    PlaybackSettings::ONCE.with_spatial(true),
+                ));
             }
         }
     }
@@ -71,11 +68,7 @@ impl Plugin for BulletPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup).add_systems(
             Update,
-            (
-                bullet_lifetime_system,
-                bounce_sound_system,
-            )
-                .run_if(in_state(AppState::Running)),
+            (bullet_lifetime_system, bounce_sound_system).run_if(in_state(AppState::Running)),
         );
     }
 }

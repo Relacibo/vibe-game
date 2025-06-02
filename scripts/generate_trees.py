@@ -301,7 +301,7 @@ for i in range(12):
     crown_height = np.random.uniform(0.3, 0.7) * trunk_height
     tree_info = {
         "trunk": {
-            "center": [0, 0.6, 0],
+            "center": [0, trunk_height / 2.0, 0],  # <-- Korrektur hier!
             "radius": trunk_radius,
             "height": trunk_height,
         },

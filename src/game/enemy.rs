@@ -264,12 +264,8 @@ fn enemy_shooting(
                     coefficient: 0.1, // oder ein Wert nach Geschmack, z.B. 0.5–1.0
                     combine_rule: CoefficientCombineRule::Average,
                 },
-            ));
-
-            commands.spawn((
                 AudioPlayer::new(enemy_shoot_sound.0.clone()),
                 PlaybackSettings::ONCE.with_spatial(true),
-                Transform::from_translation(spawn_pos),
             ));
         }
     }

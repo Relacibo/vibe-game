@@ -87,6 +87,9 @@ fn main() {
     #[cfg(not(target_family = "wasm"))]
     app.insert_state(AppState::default());
 
+    #[cfg(debug_assertions)]
+    app.add_plugins(RapierDebugRenderPlugin::default());
+
     app.run();
 }
 
@@ -189,6 +192,8 @@ fn setup(
             coefficient: 0.1,
             combine_rule: CoefficientCombineRule::Average,
         },
+        ActiveEvents::COLLISION_EVENTS,
+        ActiveCollisionTypes::DYNAMIC_STATIC,
     ));
 
     // Wände (jeweils 2 km lang, 10 m hoch, 1 m dick)
