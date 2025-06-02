@@ -2,8 +2,6 @@ use crate::{AppState, Enemy, Health, Player};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use super::enemy::PendingExplosion;
-
 #[derive(Debug, Clone, Component)]
 pub struct Bullet;
 
@@ -13,49 +11,6 @@ struct BounceSound(Handle<AudioSource>);
 #[derive(Component)]
 pub struct BulletLifetime {
     pub timer: Timer,
-}
-
-pub fn bullet_collision_system(
-    mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    mut player_query: Query<(Entity, &mut Health), With<Player>>,
-    mut enemy_query: Query<(Entity, &mut ExternalImpulse), With<Enemy>>,
-    bullet_query: Query<(Entity, &Velocity), With<Bullet>>,
-) {
-    for event in collision_events.read() {
-        if let CollisionEvent::Started(e1, e2, _) = event {
-            // Finde die Bullet und ihre Velocity
-            let ((bullet_entity, bullet_velocity), other) = if let Ok(b) = bullet_query.get(*e1) {
-                (b, e2)
-            } else if let Ok(b) = bullet_query.get(*e2) {
-                (b, e1)
-            } else {
-                continue;
-            };
-
-            // Prüfe, ob der andere ein Spieler ist
-            if let Ok((player_entity, mut health)) = player_query.get_mut(*other) {
-                health.value -= 1.0;
-                println!("Spieler getroffen! Leben: {}", health.value);
-                continue;
-            }
-
-            // Prüfe, ob der andere ein Gegner ist
-            if let Ok((enemy_entity, mut impulse)) = enemy_query.get_mut(*other) {
-                let dir = bullet_velocity.linvel.normalize_or_zero();
-                let impulse_vec = dir * 60.0 + Vec3::Y * 6.0;
-                impulse.impulse += impulse_vec;
-
-                // Explosion vormerken
-                commands
-                    .entity(enemy_entity)
-                    .insert(PendingExplosion::new());
-
-                commands.entity(bullet_entity).despawn();
-                continue;
-            }
-        }
-    }
 }
 
 fn bullet_lifetime_system(
@@ -117,7 +72,6 @@ impl Plugin for BulletPlugin {
         app.add_systems(Startup, setup).add_systems(
             Update,
             (
-                bullet_collision_system,
                 bullet_lifetime_system,
                 bounce_sound_system,
             )

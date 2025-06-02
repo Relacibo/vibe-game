@@ -14,20 +14,17 @@ use bevy::{
     },
 };
 use bevy_common_assets::json::JsonAssetPlugin;
-use bevy_rapier3d::{na::RealField, prelude::*};
+use bevy_rapier3d::prelude::*;
+use game::explosion::ExplosionPlugin;
+use game::tree::TreePlugin;
 use noise::{NoiseFn, Perlin};
-use rand::seq::SliceRandom;
-use std::{f32::consts::PI, mem::zeroed};
-
 pub mod assets;
 pub mod game;
 
-use bevy::ecs::system::ParamSet;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use bevy_rapier3d::prelude::*;
 use game::{
     background_music_plugin::BackgroundMusicPlugin,
-    bullet::{Bullet, BulletLifetime, BulletPlugin, bullet_collision_system},
+    bullet::BulletPlugin,
     camera::CameraPlugin,
     enemy::EnemyPlugin,
     player::PlayerPlugin,
@@ -47,45 +44,6 @@ pub enum AppState {
     #[default]
     Running,
     Paused,
-}
-
-#[derive(Resource, Deserialize, Debug, Clone, bevy::asset::Asset, bevy::reflect::TypePath)]
-struct TreeColliderInfo {
-    trunk: ColliderPart,
-    crown: ColliderPart,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct ColliderPart {
-    center: [f32; 3],
-    radius: f32,
-    height: f32,
-}
-
-#[derive(Debug, Clone)]
-struct Tree {
-    scene_handle: Handle<Scene>,
-    collider_info: Handle<TreeColliderInfo>,
-}
-
-#[derive(Resource)]
-struct Trees {
-    trees: [Tree; 12],
-}
-
-impl Trees {
-    fn new(asset_server: &Res<AssetServer>) -> Self {
-        let trees: [Tree; 12] = std::array::from_fn(|i| {
-            let scene_handle = asset_server.load(format!("models/trees/tree_{i}.glb#Scene0"));
-            let collider_info =
-                asset_server.load(format!("models/trees/tree_{i}.tree_collider.json"));
-            Tree {
-                scene_handle,
-                collider_info,
-            }
-        });
-        Self { trees }
-    }
 }
 
 // --- In deiner main() ---
@@ -110,17 +68,9 @@ fn main() {
     .add_plugins(CameraPlugin)
     .add_plugins(PlayerPlugin)
     .add_plugins(PauseMenuPlugin)
-    .add_plugins(JsonAssetPlugin::<TreeColliderInfo>::new(&[
-        "tree_collider.json",
-    ]))
-    .add_systems(
-        Startup,
-        (setup.after(setup_skybox), spawn_trees.after(setup)),
-    ) // <--- Reihenfolge explizit!
-    .add_systems(
-        Update,
-        update_tree_colliders.run_if(in_state(AppState::Running)),
-    )
+    .add_plugins(ExplosionPlugin)
+    .add_plugins(TreePlugin)
+    .add_systems(Startup, setup.after(setup_skybox)) // <--- Reihenfolge explizit!
     .configure_sets(
         Update,
         (
@@ -272,9 +222,6 @@ fn setup(
         Vec3::new(1.0, 10.0, 2000.0),
         Vec3::new(-1000.0, 5.0, 0.0),
     ); // West
-
-    // Trees-Resource mit Collider-Infos laden
-    commands.insert_resource(Trees::new(&asset_server));
 }
 
 // Walls-Hilfsfunktion (wie gehabt)
@@ -293,118 +240,4 @@ fn spawn_wall(
         RigidBody::Fixed,
         Collider::cuboid(size.x / 2.0, size.y / 2.0, size.z / 2.0),
     ));
-}
-
-fn spawn_trees(mut commands: Commands, trees: Res<Trees>) {
-    let perlin = Perlin::new(42);
-    let mut rng = rand::rng();
-
-    let ground_size = 2000.0;
-    let tree_count = 800;
-    let min_distance = 6.0; // Mindestabstand zwischen Bäumen
-    let mut spawned = 0;
-    let mut tries = 0;
-    let mut tree_positions: Vec<(f32, f32)> = Vec::with_capacity(tree_count);
-
-    while spawned < tree_count && tries < tree_count * 10 {
-        tries += 1;
-        let x = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
-        let z = rng.random_range(-ground_size / 2.0..ground_size / 2.0);
-
-        // Für größere Wäldchen: Noise-Schwelle niedriger und Skalierung kleiner
-        let noise_val = perlin.get([x as f64 / 800.0, z as f64 / 800.0]);
-        let is_wood = noise_val > 0.18;
-        let is_lonely = rng.random_bool(0.01);
-
-        if is_wood || is_lonely {
-            // Prüfe Mindestabstand zu allen bisherigen Bäumen
-            if tree_positions.iter().all(|&(px, pz)| {
-                let dx = px - x;
-                let dz = pz - z;
-                (dx * dx + dz * dz).sqrt() >= min_distance
-            }) {
-                let idx = rng.random_range(0..trees.trees.len());
-                let tree = &trees.trees[idx];
-
-                let y_rot = rng.random_range(0.0..std::f32::consts::TAU);
-
-                commands.spawn((
-                    SceneRoot(tree.scene_handle.clone()),
-                    Transform {
-                        translation: Vec3::new(x, 0.0, z),
-                        rotation: Quat::from_rotation_y(y_rot),
-                        scale: Vec3::splat(3.0),
-                    },
-                    Visibility::Visible,
-                    RigidBody::Fixed,
-                    TreeRoot { idx },
-                ));
-
-                tree_positions.push((x, z));
-                spawned += 1;
-            }
-        }
-    }
-}
-
-#[derive(Component)]
-struct TreeRoot {
-    idx: usize, // Index im Trees-Array
-}
-
-#[derive(Component)]
-struct TreeCollider;
-
-fn update_tree_colliders(
-    mut commands: Commands,
-    player_query: Single<&Transform, With<Player>>,
-    tree_query: Query<(Entity, &Transform, &TreeRoot, Option<&Children>)>,
-    collider_query: Query<&TreeCollider>,
-    collider_infos: Res<Assets<TreeColliderInfo>>,
-    trees: Res<Trees>,
-) {
-    let player_pos = player_query.translation;
-    let cull_distance = 80.0; // z.B. 80 Meter
-
-    for (entity, tree_transform, tree_root, children) in tree_query.iter() {
-        let tree_pos = tree_transform.translation;
-        let dist = player_pos.distance(tree_pos);
-
-        let has_collider = children
-            .map(|c| c.iter().any(|child| collider_query.get(child).is_ok()))
-            .unwrap_or(false);
-
-        if dist < cull_distance && !has_collider {
-            // Collider SPAWNEN
-            let tree = &trees.trees[tree_root.idx];
-            let Some(collider_info) = collider_infos.get(&tree.collider_info) else {
-                warn!("Collider not present! {}", tree_root.idx);
-                return;
-            };
-
-            let TreeColliderInfo { trunk, crown } = collider_info;
-
-            commands.entity(entity).with_children(|parent| {
-                parent.spawn((
-                    Collider::cylinder(trunk.height / 2.0, trunk.radius),
-                    Transform::from_xyz(trunk.center[0], trunk.center[1], trunk.center[2]),
-                    TreeCollider,
-                ));
-                parent.spawn((
-                    Collider::ball(crown.radius),
-                    Transform::from_xyz(crown.center[0], crown.center[1], crown.center[2]),
-                    TreeCollider,
-                ));
-            });
-        } else if dist >= cull_distance && has_collider {
-            // Collider ENTFERNEN
-            if let Some(children) = children {
-                for &child in children {
-                    if collider_query.get(child).is_ok() {
-                        commands.entity(child).despawn();
-                    }
-                }
-            }
-        }
-    }
 }

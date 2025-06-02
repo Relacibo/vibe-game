@@ -8,3 +8,5 @@ pub mod network;
 pub mod pause_menu_gui;
 pub mod player;
 pub mod skybox_plugin;
+pub mod explosion;
+pub mod tree;
