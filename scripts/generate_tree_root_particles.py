@@ -1,13 +1,13 @@
 import numpy as np
-from PIL import Image, ImageDraw
 import os
 
 SCRIPT_NAME = "generate_roots"
 TARGET_DIR = os.path.join("generated", SCRIPT_NAME)
 os.makedirs(TARGET_DIR, exist_ok=True)
 
-def create_root_obj(filename, segments=14, length=2.2, radius=0.09, style="normal"):
+def create_root_obj(filename, segments=14, length=2.2, radius=0.09, style="normal", sides=8):
     verts = []
+    faces = []
     for i in range(segments + 1):
         t = i / segments
         # Verschiedene Styles für interessante Formen
@@ -33,12 +33,25 @@ def create_root_obj(filename, segments=14, length=2.2, radius=0.09, style="norma
             x = np.cos(angle) * radius * (1 - t * 0.7)
             y = t * length + np.random.uniform(-0.05, 0.05)
             z = np.sin(angle) * radius * (1 - t * 0.7)
-        verts.append((x, y, z))
+        # Für jeden Abschnitt einen Kreis an Vertices erzeugen
+        for s in range(sides):
+            theta = 2 * np.pi * s / sides
+            dx = np.cos(theta) * radius * 0.3
+            dz = np.sin(theta) * radius * 0.3
+            verts.append((x + dx, y, z + dz))
+    # Faces erzeugen (Quads zwischen den Kreisen)
+    for i in range(segments):
+        for s in range(sides):
+            curr = i * sides + s
+            next = curr + sides
+            next_s = i * sides + (s + 1) % sides
+            next_next = next_s + sides
+            faces.append((curr + 1, next + 1, next_next + 1, next_s + 1))
     with open(filename, "w") as f:
         for v in verts:
             f.write(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f}\n")
-        for i in range(1, len(verts)):
-            f.write(f"l {i} {i+1}\n")
+        for face in faces:
+            f.write(f"f {' '.join(str(idx) for idx in face)}\n")
 
 # Hauptwurzeln
 styles = ["normal", "spiral", "bent", "split"]
@@ -62,21 +75,4 @@ for i in range(4):
         style="normal"
     )
 
-# --- 2. Textur generieren ---
-WIDTH, HEIGHT = 256, 256
-img = Image.new("RGB", (WIDTH, HEIGHT), (60, 40, 20))
-draw = ImageDraw.Draw(img)
-for _ in range(80):
-    x1 = np.random.randint(0, WIDTH)
-    y1 = np.random.randint(0, HEIGHT)
-    x2 = x1 + np.random.randint(-30, 30)
-    y2 = y1 + np.random.randint(-30, 30)
-    color = (
-        70 + np.random.randint(-10, 10),
-        50 + np.random.randint(-10, 10),
-        30 + np.random.randint(-10, 10)
-    )
-    draw.line((x1, y1, x2, y2), fill=color, width=np.random.randint(2, 6))
-img.save(os.path.join(TARGET_DIR, "root_diffuse.png"))
-
-print(f"Mehrere Wurzel-Meshes und Textur generiert in {TARGET_DIR}")
+print(f"Mehrere Wurzel-Meshes generiert in {TARGET_DIR}")

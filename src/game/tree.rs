@@ -278,7 +278,7 @@ pub fn maybe_uproot_tree(
         },
     ));
 
-    // let mut rng = rand::rng();
+    let mut rng = rand::rng();
     // for _ in 0..3 {
     //     let root_scene = root_assets.roots.choose(&mut rng).unwrap().clone();
     //     let angle = rng.random_range(0.0..std::f32::consts::TAU);
@@ -309,7 +309,7 @@ pub fn maybe_uproot_tree(
     //     let splitter_scene = root_assets.splitters.choose(&mut rng).unwrap().clone();
     //     let angle = rng.random_range(0.0..std::f32::consts::TAU);
     //     let dir = Vec3::new(angle.cos(), rng.random_range(0.7..1.5), angle.sin()).normalize();
-    //     let impulse = dir * rng.random_range(10.0..18.0);
+    //     let impulse = dir * rng.random_range(1.0..2.0);
 
     //     commands.spawn((
     //         SceneRoot(splitter_scene),
@@ -327,6 +327,7 @@ pub fn maybe_uproot_tree(
     //                 rng.random_range(-3.0..3.0),
     //             ),
     //         },
+    //         ColliderMassProperties::Density(2.0),
     //         RigidBody::Dynamic,
     //         Collider::cylinder(0.2, 0.04),
     //     ));
